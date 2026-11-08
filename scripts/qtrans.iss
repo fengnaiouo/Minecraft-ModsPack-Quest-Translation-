@@ -2,6 +2,9 @@
 #ifndef AppVersion
 #define AppVersion "0.1.0"
 #endif
+#ifndef UseChinese
+#define UseChinese "0"
+#endif
 #define AppPublisher "QTrans"
 #define AppSource AddBackslash(SourcePath) + "..\target\installer-staging\QTrans"
 
@@ -25,7 +28,11 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
+#if UseChinese == "1"
 Name: "chinesetraditional"; MessagesFile: "compiler:Languages\ChineseTraditional.isl"
+#else
+Name: "english"; MessagesFile: "compiler:Default.isl"
+#endif
 
 [Tasks]
 Name: "desktopicon"; Description: "建立桌面捷徑"; GroupDescription: "其他選項："; Flags: unchecked

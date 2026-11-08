@@ -90,6 +90,7 @@ rtk go build ./...
 
 GUI 右上角的「檢查更新」會查詢本專案 GitHub Releases。若發現較新的版本，可下載並啟動該
 版本的 Inno Setup 安裝程式；安裝前仍會由安裝精靈確認，不會在背景無提示覆寫程式。
+封裝時若 Inno Setup 提供繁體中文語系檔，安裝精靈會使用繁體中文；否則使用英文。
 目前尚未發布 Release 時會顯示提示。維護者需將 `Cargo.toml` 的 workspace 版本更新後，
 推送相同版本的 `v<版本>` 標籤（例如 `v0.2.0`）；GitHub Actions 會建置並發布安裝程式，
 供 GUI 更新檢查使用。

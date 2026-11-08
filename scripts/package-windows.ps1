@@ -98,7 +98,9 @@ Set-Content -Encoding utf8 -Path (Join-Path $app "work\README.txt") `
 
 Write-Host "== Compile Inno Setup installer ==" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path (Split-Path $output -Parent) | Out-Null
-& $iscc "/O$(Split-Path $output -Parent)" "/DAppVersion=$appVersion" $iss
+$languageFile = Join-Path (Split-Path $iscc -Parent) "Languages\ChineseTraditional.isl"
+$useChinese = if (Test-Path -LiteralPath $languageFile) { "1" } else { "0" }
+& $iscc "/O$(Split-Path $output -Parent)" "/DAppVersion=$appVersion" "/DUseChinese=$useChinese" $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
 if (-not (Test-Path -LiteralPath $output -PathType Leaf)) {
     throw "Installer compilation completed but the expected output was not created: $output"
