@@ -1,0 +1,29 @@
+[workspace]
+members = [
+    "crates/qtrans-core",
+    "crates/qtrans-cli",
+    "crates/qtrans-gui",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+authors = ["QTrans"]
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+zip = "9"
+walkdir = "2"
+clap = { version = "4", features = ["derive"] }
+ureq = { version = "2", features = ["json"] }
+chrono = "0.4"
+
+[profile.release]
+opt-level = 2
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,18 @@
+[package]
+name = "qtrans-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "qtrans"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+ureq.workspace = true
+chrono.workspace = true
+qtrans-core = { path = "../qtrans-core" }

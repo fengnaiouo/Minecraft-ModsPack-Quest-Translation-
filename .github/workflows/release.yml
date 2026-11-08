@@ -1,0 +1,59 @@
+name: Windows release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+
+      - name: Validate release version
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $manifest = Get-Content -Raw Cargo.toml
+          if ($manifest -notmatch '(?ms)^\[workspace\.package\]\s*.*?^version\s*=\s*"([^"]+)"') {
+            throw "Could not read the workspace version."
+          }
+          $manifestVersion = $Matches[1]
+          $tagVersion = $env:RELEASE_TAG.TrimStart("v")
+          if ($manifestVersion -ne $tagVersion) {
+            throw "Tag v$tagVersion does not match Cargo.toml version $manifestVersion."
+          }
+
+      - name: Test Rust workspace
+        run: cargo test --workspace
+
+      - name: Test Go translator
+        working-directory: go/translator
+        run: go test ./...
+
+      - name: Build installer
+        shell: pwsh
+        run: .\scripts\package-windows.ps1
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: dist/QTrans-Setup-x64.exe

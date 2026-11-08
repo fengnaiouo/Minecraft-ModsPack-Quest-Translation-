@@ -88,6 +88,12 @@ rtk go build ./...
 `%LOCALAPPDATA%\Programs\QTrans`，不需要系統管理員權限。重新安裝會更新程式檔，但保留既有的
 `work/`、`modpacks/` 和 `zip/` 內容。
 
+GUI 右上角的「檢查更新」會查詢本專案 GitHub Releases。若發現較新的版本，可下載並啟動該
+版本的 Inno Setup 安裝程式；安裝前仍會由安裝精靈確認，不會在背景無提示覆寫程式。
+目前尚未發布 Release 時會顯示提示。維護者需將 `Cargo.toml` 的 workspace 版本更新後，
+推送相同版本的 `v<版本>` 標籤（例如 `v0.2.0`）；GitHub Actions 會建置並發布安裝程式，
+供 GUI 更新檢查使用。
+
 ## 快速開始
 
 ### 1. 啟動翻譯服務

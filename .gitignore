@@ -1,0 +1,12 @@
+/target
+/bin/
+/work/
+/modpacks/*.zip
+/zip/*.zip
+*.exe
+/work/projects
+/work/output
+/work/extracted
+/work/_probe
+/dist
+*.log

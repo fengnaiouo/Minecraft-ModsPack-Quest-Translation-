@@ -1,0 +1,10 @@
+pub(crate) const BG: u32 = 0x0b1020;
+pub(crate) const PANEL: u32 = 0x121a2a;
+pub(crate) const PANEL_ALT: u32 = 0x1b2638;
+pub(crate) const BORDER: u32 = 0x2b394e;
+pub(crate) const TEXT: u32 = 0xf1f5f9;
+pub(crate) const MUTED: u32 = 0x9aa9bd;
+pub(crate) const ACCENT: u32 = 0x7cdb9b;
+pub(crate) const GREEN: u32 = 0x49d49d;
+pub(crate) const ORANGE: u32 = 0xf0b95b;
+pub(crate) const RED: u32 = 0xf07178;

@@ -1,0 +1,17 @@
+[package]
+name = "qtrans-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "qtrans-gui"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+qtrans-core = { path = "../qtrans-core" }
+gpui = "0.2.2"
+rfd = "0.15"
+ureq.workspace = true
