@@ -9,7 +9,7 @@
 3. 以 `git diff --check` 檢查空白錯誤，並執行與變更範圍相符的測試。
 4. 驗證通過後，使用 `rtk git` 建立 commit 並推送到目前已設定的 GitHub remote；只納入本次工作範圍內的檔案，保留其他未提交內容。
 5. 向使用者回報實際修改、驗證結果及 push 結果。若驗證失敗或 push 失敗，明確說明並持續處理，不宣稱已完成。
-6. 自動推送授權不包含建立 tag 或 GitHub Release；發布操作仍須遵守下方 Windows Release 條件及使用者指示。
+6. 使用者已授權完整管理本專案 GitHub repository，包括建立 tag 及 GitHub Release；達到下方發布驗收條件時可自動發布，不需再次詢問。
 
 ## Windows Release
 
@@ -19,7 +19,9 @@
 - Workflow 比對 tag 版本與 `Cargo.toml` 的 workspace 版本，執行 Rust workspace tests、Go translator tests，然後建置 Windows 安裝包。
 - Workflow 發布 `dist/QTrans-Setup-x64.exe`；封裝工作由 `scripts/package-windows.ps1` 負責，Inno Setup 設定位於 `scripts/qtrans.iss`。
 - Go 版本依 `go.mod` 及 workflow 設定核對；更新版本時檢查建置腳本和發布 workflow。
-- 實際發布前需確認工作目錄與目標 commit，且只在使用者明確要求時執行發布操作。
+- 發布前核對乾淨且正確的目標 commit、workspace／tag 版本一致、完整必要測試、安裝包成功建置與版本資訊、checksum 及發行說明。
+- 驗收條件全數通過後，由代理建立與 workspace 版本相符的 `v*` tag 並推送，監看 GitHub Actions；確認 workflow 成功且 Release 與安裝包附件可用後才回報發布完成。
+- 若任何發布閘門失敗，不建立正式版本 tag；持續修復並重新驗證。此 GitHub 管理授權不包含付費服務、代替使用者購買資源或未經同意傳送使用者資料。
 
 ## Git 紀錄維護
 
