@@ -9,6 +9,11 @@ updates:
       cargo-dependencies:
         patterns:
           - "*"
+        # Major upgrades need code changes (for example ureq 2 -> 3 and
+        # sha2 0.10 -> 0.11) and are handled as dedicated changes.
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: gomod
     directory: /go/translator
