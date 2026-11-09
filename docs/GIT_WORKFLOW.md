@@ -7,8 +7,9 @@
 1. 在 repository 根目錄檢查 `git status --short`，辨識既有工作區變更。
 2. 只修改本次任務範圍；不要覆蓋、還原或清理其他未提交檔案。
 3. 以 `git diff --check` 檢查空白錯誤，並執行與變更範圍相符的測試。
-4. 向使用者回報實際修改、驗證結果及未執行的檢查。
-5. 使用者未明確要求時，不建立 commit、push、tag 或 Release。
+4. 驗證通過後，使用 `rtk git` 建立 commit 並推送到目前已設定的 GitHub remote；只納入本次工作範圍內的檔案，保留其他未提交內容。
+5. 向使用者回報實際修改、驗證結果及 push 結果。若驗證失敗或 push 失敗，明確說明並持續處理，不宣稱已完成。
+6. 自動推送授權不包含建立 tag 或 GitHub Release；發布操作仍須遵守下方 Windows Release 條件及使用者指示。
 
 ## Windows Release
 
