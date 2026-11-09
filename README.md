@@ -311,13 +311,12 @@ KubeJS 腳本採保守掃描，只擷取 `Text.of`、`Text.literal`、`Component
 
 ## 專案文件與 AI 指引
 
-以下文件均屬於此 QTrans repository；專案歷程、需求紀錄及 AI 規則以本 repository 與已提供的使用者需求為依據。`.agents/skills/` 是專案自有 Skills，不以外部 Skills 或共用 Markdown 取代：
+以下文件均屬於此 QTrans repository；專案歷程、需求紀錄及 AI 規則以本 repository 與已提供的使用者需求為依據：
 
 - [`AGENTS.md`](./AGENTS.md)：專案共通規則與文件索引
 - [`CLAUDE.md`](./CLAUDE.md)、[`GEMINI.md`](./GEMINI.md)、[`.github/copilot-instructions.md`](./.github/copilot-instructions.md)：AI 工具入口
 - [`.github/instructions/`](./.github/instructions/) 與 [`.github/prompts/`](./.github/prompts/)：檔案範圍指引與任務提示
 - 各模組的 `AGENTS.md`：模組專屬實作規則
-- [`.agents/skills/`](./.agents/skills/)：此 repository 自有的 Skills
 - [`CHANGELOG.md`](./CHANGELOG.md)：已整理的功能變更
 - [`docs/PROJECT_HISTORY.md`](./docs/PROJECT_HISTORY.md)：專案需求及里程碑
 - [`docs/PRODUCT_PLAN.md`](./docs/PRODUCT_PLAN.md)：產品定位、功能規格、上市路線圖與驗收條件
