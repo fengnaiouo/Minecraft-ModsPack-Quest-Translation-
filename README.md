@@ -2,6 +2,10 @@
 
 ![QTrans logo](assets/brand/qtrans-logo.svg)
 
+[![CI](https://github.com/fengnaiouo/QTrans/actions/workflows/ci.yml/badge.svg)](https://github.com/fengnaiouo/QTrans/actions/workflows/ci.yml)
+[![Release](https://github.com/fengnaiouo/QTrans/actions/workflows/release.yml/badge.svg)](https://github.com/fengnaiouo/QTrans/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 針對 **FTB Quests** 與 **KubeJS** 的 Minecraft 模組包漢化工具，輸出繁體中文（`zh_tw`）。
 
 - 核心／CLI／GUI：**Rust**
@@ -65,7 +69,7 @@ cargo build --release
 
 # Go 翻譯服務
 cd go/translator
-go build -ldflags "-X main.version=0.1.3" -o ../../bin/qtrans-translator.exe .
+go build -ldflags "-X main.version=0.1.4" -o ../../bin/qtrans-translator.exe .
 cd ../..
 ```
 
@@ -94,10 +98,13 @@ rtk go build ./...
 `dist\QTrans-Setup-x64.exe`。安裝程式內含 GUI、CLI、Go 翻譯服務及完整資料夾結構；
 執行後依 Inno Setup 精靈選擇安裝位置，完成後可直接啟動 QTrans。預設安裝於目前使用者的
 `%LOCALAPPDATA%\Programs\QTrans`，不需要系統管理員權限。重新安裝會更新程式檔，但保留既有的
-`work/`、`modpacks/` 和 `zip/` 內容。
+`work/`、`modpacks/` 和 `zip/` 內容。解除安裝會移除程式與捷徑；翻譯專案、模組包與輸出資料
+預設會保留，安裝程式會詢問是否一併刪除，預設選項為「否」。若安裝目錄還有非 QTrans 管理的
+檔案，或您選擇保留使用者資料，目錄會保留並提示位置。
 
 GUI 右上角的「檢查更新」會查詢本專案 GitHub Releases。若發現較新的版本，可下載並啟動該
 版本的 Inno Setup 安裝程式；安裝前仍會由安裝精靈確認，不會在背景無提示覆寫程式。
+下載的安裝程式暫存於 `work/updates/`，下次下載時會清理先前的檔案。
 封裝時若 Inno Setup 提供繁體中文語系檔，安裝精靈會使用繁體中文；否則使用英文。
 目前尚未發布 Release 時會顯示提示。維護者需將 `Cargo.toml` 的 workspace 版本更新後，
 推送相同版本的 `v<版本>` 標籤（例如 `v0.2.0`）；GitHub Actions 會建置並發布安裝程式，
@@ -170,6 +177,8 @@ qtrans run     <zip> [--provider ...] [--service ...] [--skip-translate] [--limi
                   [--batch-size N] [--overwrite]
 ```
 
+安裝版不會自動把 `qtrans.exe` 加入系統 `PATH`；請在安裝目錄執行 `.\qtrans.exe`，或自行將該目錄加入 `PATH`。
+
 建議流程：
 
 ```powershell
@@ -191,7 +200,7 @@ qtrans build --project work\projects\xxx
 | `openai` | `OPENAI_API_KEY` | 品質最好，支援術語與上下文。任何 OpenAI 相容服務皆可（DeepSeek、Ollama、LM Studio…） |
 | `deepl` | `DEEPL_API_KEY` | DeepL API，`zh-TW` 會轉成 `ZH-HANT` |
 | `offline` | 不需要 | 只套用 `glossary.csv`，其餘保留英文 |
-| `mock` | 不需要 | 測試流程用，輸出「【譯】原文」 |
+| `mock` | 不需要 | 測試流程用，輸出「【譯】原文」；僅供 CLI／開發測試，GUI 設定頁不提供 |
 
 其他環境變數：
 
@@ -318,7 +327,13 @@ KubeJS 腳本採保守掃描，只擷取 `Text.of`、`Text.literal`、`Component
 
 ---
 
+## 貢獻與安全
+
+- 開發環境、驗證命令與 PR 流程請見 [`CONTRIBUTING.md`](./CONTRIBUTING.md)。
+- 安全性問題請依 [`SECURITY.md`](./SECURITY.md) 私下回報，不要開公開 issue。
+- 參與本專案請遵守 [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)。
+- 功能建議與錯誤回報請使用 GitHub issue 範本；請勿附上 API 金鑰或私人模組包。
+
 ## 授權
 
-MIT
-# Minecraft-ModsPack-Quest-Translation-
+本專案以 [MIT License](./LICENSE) 釋出。

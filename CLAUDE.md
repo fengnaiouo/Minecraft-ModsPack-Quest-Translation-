@@ -6,4 +6,5 @@
 - 專案資料來源限定於本 repository。`.agents/skills/` 是專案自有 Skills；不要讀取 repository 外的 Skills、共用 Markdown 或本機資料。
 - 依現有 crate、Go service 與 scripts 的分工修改；不複製核心檔案處理邏輯。
 - 修改翻譯流程時保護 ZIP、SNBT／KubeJS 原始內容、placeholder、術語及 API 金鑰。
+- 安裝與解除安裝不得預設刪除使用者專案、模組包或輸出；GUI 不提供 `mock`，結束時停止它啟動的翻譯服務。
 - 執行與修改相符的最小檢查，並只回報實際結果。未經要求不建立 commit。

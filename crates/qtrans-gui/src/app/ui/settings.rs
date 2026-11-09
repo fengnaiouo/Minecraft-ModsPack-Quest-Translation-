@@ -46,14 +46,6 @@ impl QTransApp {
                 &self.provider,
                 !busy,
                 cx.listener(|this, _, _, cx| this.set_provider("offline", cx)),
-            ))
-            .child(provider_button(
-                "provider-mock",
-                "測試",
-                "mock",
-                &self.provider,
-                !busy,
-                cx.listener(|this, _, _, cx| this.set_provider("mock", cx)),
             ));
 
         let settings_details = div()

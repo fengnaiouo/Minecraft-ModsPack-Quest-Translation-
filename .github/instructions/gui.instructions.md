@@ -13,5 +13,6 @@ applyTo: "crates/qtrans-gui/**/*.rs"
 - ZIP、網路、檔案 I/O 與子程序等待不得阻塞 UI；錯誤須明確呈現，不可用成功狀態掩蓋。
 - 保持視窗縮放下的可操作性；修改版面時一併考量窄寬與有限高度，不擅自改變使用者指定的導覽方式。
 - API 金鑰不得寫入設定或日誌；更新安裝程式前保留使用者確認並驗證下載流程。
+- GUI 啟動的翻譯服務須在結束時停止（既有服務除外）；更新檔下載至 `work/updates/`；一般 GUI 不提供 `mock` 供應商。
 - 修改 CLI 輸出解析或流程時，同步檢查 GUI parser 與其測試。
 - 驗證：`cargo test -p qtrans-gui`；相關時執行 `cargo clippy -p qtrans-gui --all-targets -- -D warnings`。

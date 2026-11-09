@@ -2,7 +2,11 @@
 /bin/
 /work/
 /modpacks/*.zip
-/zip/*.zip
+/zip/
+/node_modules/
+/package.json
+/package-lock.json
+/skills-lock.json
 *.exe
 /work/projects
 /work/output

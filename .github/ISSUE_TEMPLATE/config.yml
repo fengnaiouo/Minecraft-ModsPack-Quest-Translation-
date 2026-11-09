@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全性問題
+    url: https://github.com/fengnaiouo/QTrans/security/advisories/new
+    about: 請私下回報漏洞，不要開公開 issue。
+  - name: 使用問題與討論
+    url: https://github.com/fengnaiouo/QTrans/discussions
+    about: 若已開啟 Discussions，可在此詢問安裝或使用問題。

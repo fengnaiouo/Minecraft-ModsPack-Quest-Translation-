@@ -21,6 +21,8 @@ use gpui::{Context, FocusHandle, ScrollHandle};
 use process::Job;
 use qtrans_core::model::{Stats, Unit};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use updates::{UpdateJob, UpdateStatus};
 
 pub(super) struct ReviewEntry {
@@ -64,6 +66,20 @@ pub(crate) struct QTransApp {
     pub(in crate::app) job: Option<Job>,
     pub(in crate::app) update_status: UpdateStatus,
     pub(in crate::app) update_job: Option<UpdateJob>,
+    pub(in crate::app) service_child: Arc<Mutex<Option<std::process::Child>>>,
+    pub(in crate::app) service_shutdown: Arc<AtomicBool>,
+}
+
+impl Drop for QTransApp {
+    fn drop(&mut self) {
+        self.service_shutdown.store(true, Ordering::SeqCst);
+        if let Ok(mut slot) = self.service_child.lock() {
+            if let Some(mut child) = slot.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+    }
 }
 
 impl QTransApp {
@@ -105,6 +121,8 @@ impl QTransApp {
             job: None,
             update_status: UpdateStatus::Idle,
             update_job: None,
+            service_child: Arc::new(Mutex::new(None)),
+            service_shutdown: Arc::new(AtomicBool::new(false)),
         };
         app.restore_last_project();
         app

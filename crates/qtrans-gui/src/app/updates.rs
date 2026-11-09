@@ -12,10 +12,11 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 const RELEASES_API: &str =
-    "https://api.github.com/repos/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/latest";
+    "https://api.github.com/repos/fengnaiouo/QTrans/releases/latest";
 const INSTALLER_NAME: &str = "QTrans-Setup-x64.exe";
 const CHECKSUM_NAME: &str = "QTrans-Setup-x64.exe.sha256";
 const MAX_INSTALLER_SIZE: u64 = 300 * 1024 * 1024;
+const MAX_DOWNLOAD_ATTEMPTS: u8 = 3;
 pub(super) const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone)]
@@ -223,7 +224,7 @@ fn latest_release() -> Result<Option<(String, String, String)>> {
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("SHA-256 檢查檔下載網址不存在"))?;
     let expected_prefix =
-        "https://github.com/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/download/";
+        "https://github.com/fengnaiouo/QTrans/releases/download/";
     if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
         return Err(anyhow!("Release 附件網址不是此 GitHub 專案"));
     }
@@ -232,17 +233,23 @@ fn latest_release() -> Result<Option<(String, String, String)>> {
 
 fn download_installer(version: &str, url: &str, checksum_url: &str) -> Result<PathBuf> {
     let expected_prefix =
-        "https://github.com/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/download/";
+        "https://github.com/fengnaiouo/QTrans/releases/download/";
     if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
         return Err(anyhow!("拒絕從非官方專案網址下載更新檔"));
     }
     let (major, minor, patch) =
         parse_version(version).ok_or_else(|| anyhow!("版本標籤格式無效：{version}"))?;
-    let checksum_response = ureq::get(checksum_url)
-        .set("User-Agent", "QTrans")
-        .timeout(Duration::from_secs(20))
-        .call()
-        .context("無法下載安裝檔 SHA-256 檢查檔")?;
+    let checksum_response = retry_http_request(
+        || {
+            ureq::get(checksum_url)
+                .set("User-Agent", "QTrans")
+                .timeout(Duration::from_secs(20))
+                .call()
+                .map_err(Box::new)
+        },
+        std::thread::sleep,
+    )
+    .context("無法下載安裝檔 SHA-256 檢查檔")?;
     let mut checksum_text = String::new();
     checksum_response
         .into_reader()
@@ -251,11 +258,17 @@ fn download_installer(version: &str, url: &str, checksum_url: &str) -> Result<Pa
         .context("讀取 SHA-256 檢查檔失敗")?;
     let expected_hash = parse_checksum(&checksum_text)?;
 
-    let response = ureq::get(url)
-        .set("User-Agent", "QTrans")
-        .timeout(Duration::from_secs(120))
-        .call()
-        .context("無法連線下載安裝檔")?;
+    let response = retry_http_request(
+        || {
+            ureq::get(url)
+                .set("User-Agent", "QTrans")
+                .timeout(Duration::from_secs(120))
+                .call()
+                .map_err(Box::new)
+        },
+        std::thread::sleep,
+    )
+    .context("無法連線下載安裝檔")?;
     if let Some(length) = response
         .header("Content-Length")
         .and_then(|length| length.parse::<u64>().ok())
@@ -282,12 +295,57 @@ fn download_installer(version: &str, url: &str, checksum_url: &str) -> Result<Pa
         return Err(anyhow!("安裝檔 SHA-256 不符，拒絕執行"));
     }
 
-    let directory = std::env::temp_dir().join("QTrans").join("updates");
+    let directory = super::paths::app_root().join("work").join("updates");
     fs::create_dir_all(&directory).context("建立更新暫存資料夾失敗")?;
+    if let Ok(entries) = fs::read_dir(&directory) {
+        for entry in entries.flatten() {
+            let candidate = entry.path();
+            let name = candidate
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if name.starts_with("QTrans-Setup-x64-") && name.ends_with(".exe") {
+                let _ = fs::remove_file(&candidate);
+            }
+        }
+    }
     let path = directory.join(format!("QTrans-Setup-x64-{major}.{minor}.{patch}.exe"));
     let mut file = fs::File::create(&path).context("建立安裝程式檔案失敗")?;
     file.write_all(&bytes).context("儲存安裝程式失敗")?;
     Ok(path)
+}
+
+fn retry_http_request<T>(
+    mut request: impl FnMut() -> std::result::Result<T, Box<ureq::Error>>,
+    mut wait: impl FnMut(Duration),
+) -> std::result::Result<T, Box<ureq::Error>> {
+    let mut attempt = 1;
+    loop {
+        match request() {
+            Ok(response) => return Ok(response),
+            Err(error) if attempt < MAX_DOWNLOAD_ATTEMPTS && is_retryable(&error) => {
+                wait(Duration::from_secs(u64::from(attempt)));
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+fn is_retryable(error: &ureq::Error) -> bool {
+    match error {
+        ureq::Error::Status(status, _) => {
+            *status == 408 || *status == 429 || (500..600).contains(status)
+        }
+        ureq::Error::Transport(error) => matches!(
+            error.kind(),
+            ureq::ErrorKind::Dns
+                | ureq::ErrorKind::ConnectionFailed
+                | ureq::ErrorKind::Io
+                | ureq::ErrorKind::ProxyConnect
+                | ureq::ErrorKind::HTTP
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -300,6 +358,63 @@ mod checksum_tests {
         assert!(parse_checksum(&valid).is_ok());
         assert!(parse_checksum("not-a-checksum").is_err());
         assert!(parse_checksum("abcd file.exe").is_err());
+    }
+
+    #[cfg(test)]
+    mod download_retry_tests {
+        use super::*;
+
+        fn gateway_timeout() -> ureq::Error {
+            let response =
+                ureq::Response::new(504, "Gateway Timeout", "").expect("construct test response");
+            ureq::Error::from(response)
+        }
+
+        #[test]
+        fn retries_temporary_gateway_errors_then_succeeds() {
+            let mut requests = 0;
+            let mut delays = Vec::new();
+            let result = retry_http_request(
+                || {
+                    requests += 1;
+                    if requests < 3 {
+                        Err(Box::new(gateway_timeout()))
+                    } else {
+                        Ok("downloaded")
+                    }
+                },
+                |delay| delays.push(delay),
+            );
+
+            assert_eq!(result.unwrap(), "downloaded");
+            assert_eq!(requests, 3);
+            assert_eq!(delays, [Duration::from_secs(1), Duration::from_secs(2)]);
+        }
+
+        #[test]
+        fn stops_after_three_temporary_failures() {
+            let mut requests = 0;
+            let mut delays = Vec::new();
+            let result = retry_http_request(
+                || {
+                    requests += 1;
+                    Err::<(), _>(Box::new(gateway_timeout()))
+                },
+                |delay| delays.push(delay),
+            );
+
+            assert!(result.is_err());
+            assert_eq!(requests, MAX_DOWNLOAD_ATTEMPTS);
+            assert_eq!(delays.len(), usize::from(MAX_DOWNLOAD_ATTEMPTS - 1));
+        }
+
+        #[test]
+        fn does_not_retry_permanent_http_errors() {
+            let response =
+                ureq::Response::new(404, "Not Found", "").expect("construct test response");
+            let error = ureq::Error::from(response);
+            assert!(!is_retryable(&error));
+        }
     }
 }
 

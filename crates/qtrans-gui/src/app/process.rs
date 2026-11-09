@@ -74,13 +74,32 @@ impl QTransApp {
         let openai_api_key = self.openai_api_key.clone();
         let openai_base_url = self.openai_base_url.clone();
         let deepl_api_key = self.deepl_api_key.clone();
+        let service_child = self.service_child.clone();
+        let service_shutdown = self.service_shutdown.clone();
         self.status = "正在啟動翻譯服務…".to_string();
 
         std::thread::spawn(move || {
-            let result =
-                start_translation_service(&openai_api_key, &openai_base_url, &deepl_api_key);
+            let result = start_translation_service(
+                &openai_api_key,
+                &openai_base_url,
+                &deepl_api_key,
+                &service_shutdown,
+            );
             match result {
-                Ok(already_running) => {
+                Ok((already_running, child)) => {
+                    if let Some(child) = child {
+                        if let Ok(mut slot) = service_child.lock() {
+                            *slot = Some(child);
+                        }
+                    }
+                    if service_shutdown.load(Ordering::SeqCst) {
+                        if let Ok(mut slot) = service_child.lock() {
+                            if let Some(mut child) = slot.take() {
+                                let _ = child.kill();
+                                let _ = child.wait();
+                            }
+                        }
+                    }
                     let message = if already_running {
                         "資訊｜翻譯服務已在執行：http://127.0.0.1:8787"
                     } else {
@@ -499,9 +518,10 @@ fn start_translation_service(
     openai_api_key: &str,
     openai_base_url: &str,
     deepl_api_key: &str,
-) -> anyhow::Result<bool> {
+    shutdown: &AtomicBool,
+) -> anyhow::Result<(bool, Option<Child>)> {
     if service_is_healthy()? {
-        return Ok(true);
+        return Ok((true, None));
     }
 
     let root = app_root();
@@ -530,7 +550,12 @@ fn start_translation_service(
         let _ = child.wait();
         return Err(error);
     }
-    Ok(false)
+    if shutdown.load(Ordering::SeqCst) {
+        let _ = child.kill();
+        let _ = child.wait();
+        anyhow::bail!("應用程式已結束，取消啟動翻譯服務");
+    }
+    Ok((false, Some(child)))
 }
 
 fn service_is_healthy() -> anyhow::Result<bool> {

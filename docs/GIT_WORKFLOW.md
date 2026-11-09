@@ -20,6 +20,7 @@
 - Workflow 發布 `dist/QTrans-Setup-x64.exe`；封裝工作由 `scripts/package-windows.ps1` 負責，Inno Setup 設定位於 `scripts/qtrans.iss`。
 - Go 版本依 `go.mod` 及 workflow 設定核對；更新版本時檢查建置腳本和發布 workflow。
 - 發布前核對乾淨且正確的目標 commit、workspace／tag 版本一致、完整必要測試、安裝包成功建置與版本資訊、checksum 及發行說明。
+- 安裝包變更須確認解除安裝預設保留使用者資料，且更新檔不寫入系統暫存目錄；未在 Windows 實機驗證前不得宣稱通過。
 - 驗收條件全數通過後，由代理建立與 workspace 版本相符的 `v*` tag 並推送，監看 GitHub Actions；確認 workflow 成功且 Release 與安裝包附件可用後才回報發布完成。
 - 若任何發布閘門失敗，不建立正式版本 tag；持續修復並重新驗證。此 GitHub 管理授權不包含付費服務、代替使用者購買資源或未經同意傳送使用者資料。
 

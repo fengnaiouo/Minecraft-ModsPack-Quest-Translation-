@@ -170,6 +170,7 @@ pub(super) fn stat(label: &'static str, value: String, color: u32) -> impl IntoE
 }
 
 pub(super) fn path_line(label: &'static str, value: String) -> impl IntoElement {
+    let value = value.strip_prefix(r"\\?\").unwrap_or(&value).to_string();
     div()
         .flex()
         .items_center()
