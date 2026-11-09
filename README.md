@@ -1,5 +1,7 @@
 # QTrans — Minecraft 模組包任務漢化工具
 
+![QTrans logo](assets/brand/qtrans-logo.svg)
+
 針對 **FTB Quests** 與 **KubeJS** 的 Minecraft 模組包漢化工具，輸出繁體中文（`zh_tw`）。
 
 - 核心／CLI／GUI：**Rust**
@@ -19,6 +21,7 @@
 | 術語保護 | 模組名、`%s`、`{key}`、`\n`、資源 ID 會先換成 `{pN}` / `{gN}` 再送翻（顏色碼交給 Google 自行保留） |
 | 翻譯快取 | SHA-256 去重快取，重跑不會重複花費 |
 | 可續傳 | `translations.jsonl` 逐批寫入，中斷後再執行會接續 |
+| 人工校訂 | GUI 可逐筆檢視來源情境、修訂翻譯並保存至專案記錄 |
 | 一鍵流程 | 解包 → 掃描 → 機翻 → 回寫 → 重新打包 |
 | 兩種輸出 | 完整 modpack ZIP + 只含變更檔案的 `overrides/` 資料夾 |
 
@@ -34,10 +37,11 @@ crates/
     src/commands.rs     各命令的工作流程
     src/translation.rs  服務請求、翻譯快取重用與術語表
   qtrans-gui/     GPUI 圖形介面 qtrans-gui
-    src/app/      專案狀態、設定、專案操作、翻譯流程與子程序
-    src/app/ui/   工作台、專案卡、設定、流程、統計、日誌與共用元件
+    src/app/      專案狀態、設定、校訂、專案操作、翻譯流程與子程序
+    src/app/ui/   工作台、校訂、專案卡、設定、流程、統計、日誌與共用元件
     src/theme.rs  GUI 色彩主題
 go/translator/    Go 翻譯服務（啟動、HTTP handler、provider、快取及字串保護分檔）
+assets/brand/     QTrans 原創 SVG 標誌、圖示及品牌預覽頁
 bin/              建置產物（qtrans-translator.exe）
 modpacks/         放原始模組包 ZIP
 work/
@@ -138,9 +142,11 @@ work/projects/.../output/...-zh_tw-overrides/   # 只含變更檔案
 ```
 
 GUI 會呼叫同目錄的 `qtrans.exe`，可選擇 ZIP、逐步執行或一鍵完成。
-主畫面以專案選擇和四步流程為主，翻譯設定、進度統計與執行日誌分區呈現；
-設定預設收合，摘要會顯示供應商、目標語言和批次大小，API 金鑰欄位只會在選到相應供應商時顯示。
-翻譯進度會隨 CLI 的掃描與批次結果即時更新字串總數、已翻譯數與目前批次，不必等整個流程結束。
+主畫面以專案選擇和四步流程為主，翻譯設定、進度統計、逐筆人工校訂與執行日誌分頁呈現；
+設定摘要會顯示供應商、目標語言和批次大小，API 金鑰欄位只會在選到相應供應商時顯示。
+工作台與設定頁會說明翻譯文字及情境的傳送對象；選用線上供應商時請勿傳送敏感內容。
+翻譯進度會隨 CLI 的掃描與批次結果即時更新字串總數、專案已譯、本次新譯、快取沿用、失敗數與目前批次，不必等整個流程結束。
+校訂頁可檢視來源文字、檔案及情境，修改並保存單筆翻譯；未儲存修改時會阻止切換，人工記錄可在後續回寫流程套用。
 執行紀錄以易讀的流程名稱呈現，並區分進行中、完成、資訊、警告與錯誤；最多保留 600 筆並可捲動查看。
 預設自動跟隨新紀錄，可暫停跟隨以檢視舊紀錄，再按「跟隨最新」回到底部。
 文字欄位支援游標左右移動、Home／End、Backspace／Delete、Ctrl+A 選取和 Ctrl+V 貼上。
@@ -305,6 +311,7 @@ KubeJS 腳本採保守掃描，只擷取 `Text.of`、`Text.literal`、`Component
 - [`.agents/skills/`](./.agents/skills/)：此 repository 自有的 Skills
 - [`CHANGELOG.md`](./CHANGELOG.md)：已整理的功能變更
 - [`docs/PROJECT_HISTORY.md`](./docs/PROJECT_HISTORY.md)：專案需求及里程碑
+- [`docs/PRODUCT_PLAN.md`](./docs/PRODUCT_PLAN.md)：產品定位、功能規格、上市路線圖與驗收條件
 - [`docs/AI_CONVERSATION_HISTORY.md`](./docs/AI_CONVERSATION_HISTORY.md)：AI 協作中確認的需求與界線摘要
 - [`docs/DECISIONS.md`](./docs/DECISIONS.md)：專案決策及其狀態
 - [`docs/GIT_HISTORY.md`](./docs/GIT_HISTORY.md) 與 [`docs/GIT_WORKFLOW.md`](./docs/GIT_WORKFLOW.md)：Git 里程碑與本專案發布流程

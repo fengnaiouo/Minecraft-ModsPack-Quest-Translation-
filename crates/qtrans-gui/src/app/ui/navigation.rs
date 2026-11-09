@@ -35,6 +35,17 @@ impl QTransApp {
                 cx.listener(|this, _, _, cx| this.set_page(AppPage::Workspace, cx)),
             ))
             .child(button(
+                "nav-review",
+                "翻譯校訂",
+                if selected == AppPage::Review {
+                    ACCENT
+                } else {
+                    PANEL_ALT
+                },
+                true,
+                cx.listener(|this, _, _, cx| this.set_page(AppPage::Review, cx)),
+            ))
+            .child(button(
                 "nav-settings",
                 "翻譯設定",
                 if selected == AppPage::Settings {

@@ -11,6 +11,7 @@ impl QTransApp {
         compact: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let can_cancel = self.can_cancel_job();
         let header = div()
             .flex()
             .flex_wrap()
@@ -36,10 +37,39 @@ impl QTransApp {
                             .w(px(36.))
                             .h(px(36.))
                             .rounded_md()
-                            .bg(rgb(ACCENT))
-                            .text_sm()
-                            .text_color(rgb(BG))
-                            .child("QT"),
+                            .bg(rgb(BG))
+                            .border_1()
+                            .border_color(rgb(BORDER))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_1()
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .gap_1()
+                                            .child(pixel(ACCENT))
+                                            .child(pixel(TEXT))
+                                            .child(pixel(TEXT)),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .gap_1()
+                                            .child(pixel(TEXT))
+                                            .child(div().w(px(6.)).h(px(6.)))
+                                            .child(pixel(TEXT)),
+                                    )
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .gap_1()
+                                            .child(pixel(TEXT))
+                                            .child(div().w(px(6.)).h(px(6.)))
+                                            .child(pixel(ACCENT)),
+                                    ),
+                            ),
                     )
                     .child(
                         div()
@@ -81,6 +111,15 @@ impl QTransApp {
                         ),
                         cx.listener(|this, _, _, cx| this.check_for_updates(cx)),
                     ))
+                    .when(can_cancel, |actions| {
+                        actions.child(button(
+                            "cancel-job",
+                            "取消工作",
+                            RED,
+                            true,
+                            cx.listener(|this, _, _, cx| this.cancel_job(cx)),
+                        ))
+                    })
                     .child(
                         div()
                             .flex()
@@ -104,4 +143,8 @@ impl QTransApp {
             );
         header
     }
+}
+
+fn pixel(color: u32) -> impl IntoElement {
+    div().w(px(6.)).h(px(6.)).bg(rgb(color))
 }

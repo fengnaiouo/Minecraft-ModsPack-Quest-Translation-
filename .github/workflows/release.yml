@@ -41,12 +41,22 @@ jobs:
             throw "Tag v$tagVersion does not match Cargo.toml version $manifestVersion."
           }
 
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint Rust workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Test Rust workspace
         run: cargo test --workspace
 
       - name: Test Go translator
         working-directory: go/translator
         run: go test ./...
+
+      - name: Vet Go translator
+        working-directory: go/translator
+        run: go vet ./...
 
       - name: Build installer
         shell: pwsh

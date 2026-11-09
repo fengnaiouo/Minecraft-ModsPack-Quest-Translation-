@@ -3,7 +3,7 @@ use qtrans_core::apply::read_translations;
 use qtrans_core::model::Unit;
 use qtrans_core::project::Project;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -139,22 +139,20 @@ pub(super) fn translate(
                 items: request_items,
             };
             let response = call_service(&project.config.service, &request)?;
-            let mut by_id: HashMap<&str, (&str, bool)> = HashMap::new();
-            for item in &response.items {
-                let ok = item.status.as_deref().unwrap_or("ok") == "ok";
-                by_id.insert(item.id.as_str(), (item.text.as_str(), ok));
-            }
+            let expected_ids: Vec<String> = local.iter().map(|(id, _)| id.clone()).collect();
+            let by_id = index_response_items(&expected_ids, response.items)?;
             for (id, units) in &local {
-                let Some((text, ok)) = by_id.get(id.as_str()) else {
+                let Some(item) = by_id.get(id) else {
                     eprintln!("warning: service returned no text for id {id}");
                     failed += units.len();
                     continue;
                 };
-                if !*ok {
+                if item.status.as_deref().unwrap_or("ok") != "ok" || item.text.trim().is_empty() {
+                    eprintln!("warning: service returned an empty or failed result for id {id}");
                     failed += units.len();
                     continue;
                 }
-                write_units(&mut out, units, text, &project.config.provider)?;
+                write_units(&mut out, units, &item.text, &project.config.provider)?;
                 translated += units.len();
             }
             out.flush()?;
@@ -173,6 +171,26 @@ pub(super) fn translate(
         failed,
         provider: project.config.provider.clone(),
     })
+}
+
+fn index_response_items(
+    expected_ids: &[String],
+    items: Vec<ResponseItem>,
+) -> Result<HashMap<String, ResponseItem>> {
+    let expected: HashSet<&str> = expected_ids.iter().map(String::as_str).collect();
+    let mut by_id = HashMap::with_capacity(items.len());
+    for item in items {
+        anyhow::ensure!(
+            expected.contains(item.id.as_str()),
+            "translation service returned an unexpected item ID: {}",
+            item.id
+        );
+        anyhow::ensure!(
+            by_id.insert(item.id.clone(), item).is_none(),
+            "translation service returned a duplicate item ID"
+        );
+    }
+    Ok(by_id)
 }
 
 fn cached_translations(
@@ -309,5 +327,47 @@ mod tests {
             Some(&"舊翻譯".to_string())
         );
         assert!(cached_translations(&[unit], &existing, true).is_empty());
+    }
+
+    #[test]
+    fn response_items_must_have_known_unique_ids() {
+        let expected = vec!["one".to_string(), "two".to_string()];
+        let valid = vec![
+            ResponseItem {
+                id: "two".into(),
+                text: "二".into(),
+                status: Some("ok".into()),
+            },
+            ResponseItem {
+                id: "one".into(),
+                text: "一".into(),
+                status: Some("ok".into()),
+            },
+        ];
+        let indexed = index_response_items(&expected, valid).unwrap();
+        assert_eq!(indexed.len(), 2);
+
+        let duplicate = vec![
+            ResponseItem {
+                id: "one".into(),
+                text: "一".into(),
+                status: None,
+            },
+            ResponseItem {
+                id: "one".into(),
+                text: "壹".into(),
+                status: None,
+            },
+        ];
+        assert!(index_response_items(&expected, duplicate).is_err());
+        assert!(index_response_items(
+            &expected,
+            vec![ResponseItem {
+                id: "unexpected".into(),
+                text: "結果".into(),
+                status: None,
+            }]
+        )
+        .is_err());
     }
 }

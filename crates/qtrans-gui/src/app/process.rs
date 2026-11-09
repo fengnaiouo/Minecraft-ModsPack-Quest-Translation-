@@ -18,6 +18,9 @@ pub(super) struct Job {
     pending: Arc<Mutex<Vec<ProcessMessage>>>,
     done: Arc<AtomicBool>,
     success: Arc<AtomicBool>,
+    cancel_requested: Arc<AtomicBool>,
+    active_child: Arc<Mutex<Option<Arc<Mutex<Child>>>>>,
+    cancelable: bool,
     translated_base: usize,
     success_status: String,
     failure_status: String,
@@ -34,11 +37,15 @@ impl Job {
         translated_base: usize,
         success_status: impl Into<String>,
         failure_status: impl Into<String>,
+        cancelable: bool,
     ) -> Self {
         Self {
             pending: Arc::new(Mutex::new(Vec::new())),
             done: Arc::new(AtomicBool::new(false)),
             success: Arc::new(AtomicBool::new(false)),
+            cancel_requested: Arc::new(AtomicBool::new(false)),
+            active_child: Arc::new(Mutex::new(None)),
+            cancelable,
             translated_base,
             success_status: success_status.into(),
             failure_status: failure_status.into(),
@@ -47,13 +54,19 @@ impl Job {
 }
 
 impl QTransApp {
+    pub(super) fn can_cancel_job(&self) -> bool {
+        self.job
+            .as_ref()
+            .is_some_and(|job| job.cancelable && !job.done.load(Ordering::SeqCst))
+    }
+
     pub(super) fn start_service(&mut self, cx: &mut Context<Self>) {
         if self.busy {
             return;
         }
         self.busy = true;
         self.log.clear();
-        let job = Job::new(self.translated, "翻譯服務已啟動", "翻譯服務啟動失敗");
+        let job = Job::new(self.translated, "翻譯服務已啟動", "翻譯服務啟動失敗", false);
         self.job = Some(job.clone());
         let pending = job.pending.clone();
         let done = job.done.clone();
@@ -108,17 +121,26 @@ impl QTransApp {
         self.busy = true;
         self.log.clear();
         self.batch_progress = None;
-        self.job = Some(Job::new(self.translated, "完成", "失敗，請查看日誌"));
+        self.translated_this_run = 0;
+        self.reused_this_run = 0;
+        self.failed_this_run = 0;
+        self.job = Some(Job::new(self.translated, "完成", "失敗，請查看日誌", true));
         let job = self.job.clone().expect("job was just initialized");
         let pending = job.pending.clone();
         let done = job.done.clone();
         let success = job.success.clone();
+        let cancel_requested = job.cancel_requested.clone();
+        let active_child = job.active_child.clone();
 
         std::thread::spawn(move || {
             let exe = qtrans_exe();
             let mut all_ok = true;
             let mut project_dir: Option<String> = None;
             for mut args in commands {
+                if cancel_requested.load(Ordering::SeqCst) {
+                    all_ok = false;
+                    break;
+                }
                 for arg in &mut args {
                     if arg == PROJECT_DIR_PLACEHOLDER {
                         let Some(path) = &project_dir else {
@@ -161,19 +183,74 @@ impl QTransApp {
                     }
                 };
 
-                let stderr_thread = child.stderr.take().map(|stderr| {
+                let stdout = child.stdout.take();
+                let stderr = child.stderr.take();
+                let child = Arc::new(Mutex::new(child));
+                match active_child.lock() {
+                    Ok(mut active) => *active = Some(child.clone()),
+                    Err(_) => {
+                        push_message(
+                            &pending,
+                            ProcessMessage::Log(
+                                "錯誤｜無法註冊作業程序，已停止以避免失控程序".to_string(),
+                            ),
+                        );
+                        if let Ok(mut child) = child.lock() {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                        }
+                        all_ok = false;
+                        break;
+                    }
+                }
+                if cancel_requested.load(Ordering::SeqCst) {
+                    if let Ok(mut child) = child.lock() {
+                        let _ = child.kill();
+                    }
+                }
+
+                let stderr_thread = stderr.map(|stderr| {
                     let reader_pending = pending.clone();
-                    std::thread::spawn(move || {
-                        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
+                    std::thread::spawn(move || -> std::io::Result<()> {
+                        for line in BufReader::new(stderr).lines() {
+                            let line = match line {
+                                Ok(line) => line,
+                                Err(error) => {
+                                    push_message(
+                                        &reader_pending,
+                                        ProcessMessage::Log(format!(
+                                            "錯誤｜讀取子程序錯誤輸出失敗：{error}"
+                                        )),
+                                    );
+                                    return Err(error);
+                                }
+                            };
                             push_message(
                                 &reader_pending,
                                 ProcessMessage::Log(format_stderr(&line)),
                             );
                         }
+                        Ok(())
                     })
                 });
-                if let Some(stdout) = child.stdout.take() {
-                    for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                if let Some(stdout) = stdout {
+                    for line in BufReader::new(stdout).lines() {
+                        let line = match line {
+                            Ok(line) => line,
+                            Err(error) => {
+                                push_message(
+                                    &pending,
+                                    ProcessMessage::Log(format!(
+                                        "錯誤｜讀取子程序輸出失敗：{error}"
+                                    )),
+                                );
+                                all_ok = false;
+                                if let Ok(mut child) = child.lock() {
+                                    let _ = child.kill();
+                                }
+                                break;
+                            }
+                        };
                         if let Some(path) = line
                             .strip_prefix("project:")
                             .map(str::trim)
@@ -192,12 +269,59 @@ impl QTransApp {
                     }
                 }
                 if let Some(handle) = stderr_thread {
-                    let _ = handle.join();
+                    match handle.join() {
+                        Ok(Ok(())) => {}
+                        Ok(Err(_)) => all_ok = false,
+                        Err(_) => {
+                            push_message(
+                                &pending,
+                                ProcessMessage::Log(
+                                    "錯誤｜讀取子程序錯誤輸出的背景工作異常結束".to_string(),
+                                ),
+                            );
+                            all_ok = false;
+                        }
+                    }
                 }
 
-                match child.wait() {
-                    Ok(status) if status.success() => {
+                let wait_result = match child.lock() {
+                    Ok(mut child) => child.wait(),
+                    Err(_) => {
+                        push_message(
+                            &pending,
+                            ProcessMessage::Log(
+                                "錯誤｜無法等待作業程序（程序鎖定狀態損壞）".to_string(),
+                            ),
+                        );
+                        all_ok = false;
+                        break;
+                    }
+                };
+                match active_child.lock() {
+                    Ok(mut active) => *active = None,
+                    Err(_) => {
+                        push_message(
+                            &pending,
+                            ProcessMessage::Log(
+                                "錯誤｜無法清除已結束的作業程序控制狀態".to_string(),
+                            ),
+                        );
+                        all_ok = false;
+                    }
+                }
+                match wait_result {
+                    Ok(status) if status.success() && !cancel_requested.load(Ordering::SeqCst) => {
                         push_message(&pending, ProcessMessage::Log(format!("完成｜{label}")));
+                    }
+                    Ok(_) if cancel_requested.load(Ordering::SeqCst) => {
+                        push_message(
+                            &pending,
+                            ProcessMessage::Log(
+                                "已取消｜已完成的批次已保存，可重新執行未完成翻譯".to_string(),
+                            ),
+                        );
+                        all_ok = false;
+                        break;
                     }
                     Ok(status) => {
                         push_message(
@@ -225,6 +349,40 @@ impl QTransApp {
         cx.notify();
     }
 
+    pub(super) fn cancel_job(&mut self, cx: &mut Context<Self>) {
+        let Some(job) = self.job.clone().filter(|job| job.cancelable) else {
+            return;
+        };
+        if job.done.load(Ordering::SeqCst) {
+            return;
+        }
+
+        job.cancel_requested.store(true, Ordering::SeqCst);
+        match job.active_child.lock() {
+            Ok(active) => {
+                if let Some(child) = active.as_ref() {
+                    match child.lock() {
+                        Ok(mut child) => match terminate_child(&mut child) {
+                            Ok(_) => {}
+                            Err(error) => {
+                                self.log.push(format!("停止作業程序時發生錯誤：{error:#}"))
+                            }
+                        },
+                        Err(_) => self
+                            .log
+                            .push("停止作業程序失敗：程序鎖定狀態損壞".to_string()),
+                    }
+                }
+            }
+            Err(_) => self
+                .log
+                .push("停止作業失敗：無法讀取程序控制狀態".to_string()),
+        }
+        self.log.push("已要求停止；正在結束目前步驟…".to_string());
+        self.status = "正在取消…".to_string();
+        cx.notify();
+    }
+
     pub(super) fn poll_job(&mut self, cx: &mut Context<Self>) {
         let Some(job) = self.job.clone() else {
             return;
@@ -244,7 +402,9 @@ impl QTransApp {
                     this.busy = false;
                     let refreshed = this.project_dir.is_none() || this.refresh();
                     let ok = job.success.load(Ordering::SeqCst) && refreshed;
-                    this.status = if ok {
+                    this.status = if job.cancel_requested.load(Ordering::SeqCst) && refreshed {
+                        "已取消；請檢查專案狀態後再繼續".to_string()
+                    } else if ok {
                         job.success_status.clone()
                     } else if refreshed {
                         job.failure_status.clone()
@@ -284,12 +444,19 @@ impl QTransApp {
                         self.stats = stats;
                     }
                     if let Some(translated_units) = progress.translated_units {
+                        self.translated_this_run = translated_units;
                         let translated = translated_base.saturating_add(translated_units);
                         self.translated = if self.stats.total_units == 0 {
                             translated
                         } else {
                             translated.min(self.stats.total_units)
                         };
+                    }
+                    if let Some(reused_units) = progress.reused_units {
+                        self.reused_this_run = reused_units;
+                    }
+                    if let Some(failed_units) = progress.failed_units {
+                        self.failed_this_run = failed_units;
                     }
                     if let Some(batch) = progress.batch {
                         self.batch_progress = Some(batch);
@@ -314,6 +481,17 @@ fn push_message(pending: &Arc<Mutex<Vec<ProcessMessage>>>, message: ProcessMessa
     match pending.lock() {
         Ok(mut guard) => guard.push(message),
         Err(_) => eprintln!("QTrans GUI background message queue is poisoned"),
+    }
+}
+
+fn terminate_child(child: &mut Child) -> anyhow::Result<bool> {
+    if child.try_wait()?.is_some() {
+        return Ok(false);
+    }
+    match child.kill() {
+        Ok(()) => Ok(true),
+        Err(_) if child.try_wait()?.is_some() => Ok(false),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -402,5 +580,48 @@ fn wait_for_service(child: &mut Child) -> anyhow::Result<()> {
             anyhow::bail!("等待健康檢查逾時（{last_error}）");
         }
         std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(test)]
+mod cancellation_tests {
+    use super::*;
+
+    #[test]
+    fn cancellation_terminates_a_running_child_process() {
+        let mut command = if cfg!(windows) {
+            let mut command = Command::new("ping");
+            command.args(["-n", "3", "127.0.0.1"]);
+            command
+        } else {
+            let mut command = Command::new("sleep");
+            command.arg("2");
+            command
+        };
+        let mut child = command
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("start test child process");
+
+        assert!(terminate_child(&mut child).expect("terminate test child"));
+        assert!(!child.wait().expect("wait for test child").success());
+    }
+
+    #[test]
+    fn cancellation_does_not_report_termination_for_an_exited_child() {
+        let mut child = if cfg!(windows) {
+            Command::new("cmd")
+                .args(["/C", "exit", "0"])
+                .spawn()
+                .expect("start completed test child")
+        } else {
+            Command::new("true")
+                .spawn()
+                .expect("start completed test child")
+        };
+        assert!(child.wait().expect("wait for test child").success());
+
+        assert!(!terminate_child(&mut child).expect("check completed test child"));
     }
 }

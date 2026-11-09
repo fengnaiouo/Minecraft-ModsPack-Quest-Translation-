@@ -3,6 +3,7 @@ mod paths;
 mod process;
 mod process_output;
 mod project;
+mod review;
 mod ui;
 mod updates;
 mod workflow;
@@ -10,6 +11,7 @@ mod workflow;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum AppPage {
     Workspace,
+    Review,
     Settings,
     Logs,
 }
@@ -17,9 +19,14 @@ pub(super) enum AppPage {
 use config::ConfigField;
 use gpui::{Context, FocusHandle, ScrollHandle};
 use process::Job;
-use qtrans_core::model::Stats;
+use qtrans_core::model::{Stats, Unit};
 use std::path::PathBuf;
 use updates::{UpdateJob, UpdateStatus};
+
+pub(super) struct ReviewEntry {
+    pub(super) unit: Unit,
+    pub(super) translation: Option<String>,
+}
 
 pub(crate) struct QTransApp {
     pub(in crate::app) zip_path: Option<PathBuf>,
@@ -27,6 +34,12 @@ pub(crate) struct QTransApp {
     pub(in crate::app) pack_name: String,
     pub(in crate::app) stats: Stats,
     pub(in crate::app) translated: usize,
+    pub(in crate::app) translated_this_run: usize,
+    pub(in crate::app) reused_this_run: usize,
+    pub(in crate::app) failed_this_run: usize,
+    pub(in crate::app) review_entries: Vec<ReviewEntry>,
+    pub(in crate::app) review_index: usize,
+    pub(in crate::app) review_translation_draft: String,
     pub(in crate::app) batch_progress: Option<(usize, usize)>,
     pub(in crate::app) provider: String,
     pub(in crate::app) service: String,
@@ -61,6 +74,12 @@ impl QTransApp {
             pack_name: String::new(),
             stats: Stats::default(),
             translated: 0,
+            translated_this_run: 0,
+            reused_this_run: 0,
+            failed_this_run: 0,
+            review_entries: Vec::new(),
+            review_index: 0,
+            review_translation_draft: String::new(),
             batch_progress: None,
             provider: "google_free".to_string(),
             service: "http://127.0.0.1:8787".to_string(),

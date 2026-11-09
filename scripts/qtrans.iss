@@ -7,6 +7,7 @@
 #endif
 #define AppPublisher "QTrans"
 #define AppSource AddBackslash(SourcePath) + "..\target\installer-staging\QTrans"
+#define AppIcon AddBackslash(AppSource) + "assets\brand\qtrans-icon.ico"
 
 [Setup]
 AppId={{8E4C0B9A-4312-4A56-9E5E-5687B08E1A0D}
@@ -20,7 +21,8 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputBaseFilename=QTrans-Setup-x64
-UninstallDisplayIcon={app}\qtrans-gui.exe
+UninstallDisplayIcon={app}\assets\brand\qtrans-icon.ico
+SetupIconFile={#AppIcon}
 WizardStyle=modern
 Compression=lzma2
 SolidCompression=yes
@@ -49,8 +51,8 @@ Name: "{app}\work\cache"; Flags: uninsneveruninstall
 Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\QTrans"; Filename: "{app}\qtrans-gui.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\QTrans"; Filename: "{app}\qtrans-gui.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\QTrans"; Filename: "{app}\qtrans-gui.exe"; WorkingDir: "{app}"; IconFilename: "{app}\assets\brand\qtrans-icon.ico"
+Name: "{autodesktop}\QTrans"; Filename: "{app}\qtrans-gui.exe"; WorkingDir: "{app}"; IconFilename: "{app}\assets\brand\qtrans-icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\qtrans-gui.exe"; Description: "啟動 QTrans"; Flags: nowait postinstall skipifsilent

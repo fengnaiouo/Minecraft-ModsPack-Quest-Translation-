@@ -1,10 +1,15 @@
 use crate::model::{validate_target_code, Manifest, ProjectConfig, Stats};
 use anyhow::{Context, Result};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::fs;
 use std::io::{BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use zip::ZipArchive;
+
+const MAX_RELEVANT_FILE_SIZE: u64 = 64 * 1024 * 1024;
+const MAX_RELEVANT_TOTAL_SIZE: u64 = 1024 * 1024 * 1024;
+const MAX_RELEVANT_FILES: usize = 100_000;
 
 pub struct Project {
     pub dir: PathBuf,
@@ -74,16 +79,17 @@ impl Project {
         // Detect the wrapper folder (`overrides/` for CurseForge, empty otherwise).
         let mut prefix = String::new();
         for i in 0..archive.len() {
-            if let Ok(entry) = archive.by_index(i) {
-                let name = entry.name()?.replace('\\', "/");
-                if name.starts_with("overrides/") {
-                    prefix = "overrides/".to_string();
-                    break;
-                }
+            let entry = archive.by_index(i)?;
+            let name = entry.name()?.replace('\\', "/");
+            if name.starts_with("overrides/") {
+                prefix = "overrides/".to_string();
+                break;
             }
         }
 
         let mut extracted_count = 0usize;
+        let mut extracted_size = 0u64;
+        let mut relevant_paths = HashSet::new();
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i)?;
             if entry.is_dir() {
@@ -97,16 +103,42 @@ impl Project {
             if !is_relevant(&rel) {
                 continue;
             }
-            if !is_safe_relative(&rel) {
-                continue;
-            }
-            let dest = extracted.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
+            let dest = safe_project_path(&extracted, &rel)
+                .with_context(|| format!("unsafe relevant ZIP entry: {name}"))?;
+            anyhow::ensure!(
+                relevant_paths.insert(rel.to_lowercase()),
+                "duplicate relevant ZIP entry: {name}"
+            );
+            anyhow::ensure!(
+                entry.size() <= MAX_RELEVANT_FILE_SIZE,
+                "relevant ZIP entry exceeds the {} MiB limit: {name}",
+                MAX_RELEVANT_FILE_SIZE / (1024 * 1024)
+            );
+            anyhow::ensure!(
+                extracted_count < MAX_RELEVANT_FILES,
+                "modpack contains more than {MAX_RELEVANT_FILES} relevant files"
+            );
+            anyhow::ensure!(
+                entry.size() <= MAX_RELEVANT_TOTAL_SIZE.saturating_sub(extracted_size),
+                "relevant ZIP entries exceed the {} GiB total limit",
+                MAX_RELEVANT_TOTAL_SIZE / (1024 * 1024 * 1024)
+            );
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)?;
             }
             let mut out =
                 fs::File::create(&dest).with_context(|| format!("create {}", dest.display()))?;
-            std::io::copy(&mut entry, &mut out)?;
+            let file_limit = MAX_RELEVANT_FILE_SIZE.min(MAX_RELEVANT_TOTAL_SIZE - extracted_size);
+            let mut limited = (&mut entry).take(file_limit + 1);
+            let copied = std::io::copy(&mut limited, &mut out)?;
+            anyhow::ensure!(
+                copied <= file_limit,
+                "relevant ZIP entry exceeded the {} MiB limit while extracting: {name}",
+                MAX_RELEVANT_FILE_SIZE / (1024 * 1024)
+            );
+            extracted_size = extracted_size
+                .checked_add(copied)
+                .context("total relevant ZIP size overflow")?;
             extracted_count += 1;
         }
 
@@ -180,6 +212,7 @@ impl Project {
     }
 
     pub fn read_zip_entry(&self, rel: &str) -> Result<Vec<u8>> {
+        validate_project_relative_path(rel)?;
         let file = fs::File::open(&self.manifest.source_zip)?;
         let mut archive = ZipArchive::new(BufReader::new(file))?;
         let name = format!("{}{}", self.manifest.zip_prefix, rel);
@@ -199,11 +232,11 @@ impl Project {
         let extracted = self.extracted();
         let mut restored = 0usize;
         for rel in rels {
+            let dest = safe_project_path(&extracted, rel)?;
             let name = format!("{}{}", self.manifest.zip_prefix, rel);
             let mut entry = archive
                 .by_name(&name)
                 .with_context(|| format!("restore source ZIP entry missing: {name}"))?;
-            let dest = extracted.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -273,9 +306,29 @@ fn is_relevant(rel: &str) -> bool {
     false
 }
 
-fn is_safe_relative(rel: &str) -> bool {
+pub(crate) fn safe_project_path(root: &Path, rel: &str) -> Result<PathBuf> {
+    validate_project_relative_path(rel)?;
+    Ok(root.join(Path::new(rel)))
+}
+
+fn validate_project_relative_path(rel: &str) -> Result<()> {
+    anyhow::ensure!(
+        !rel.is_empty()
+            && !rel.starts_with('/')
+            && !rel.contains('\\')
+            && !rel.contains(':')
+            && rel
+                .split('/')
+                .all(|part| !part.is_empty() && part != "." && part != ".."),
+        "unsafe project-relative path: {rel:?}"
+    );
     let path = Path::new(rel);
-    path.components().all(|c| matches!(c, Component::Normal(_)))
+    anyhow::ensure!(
+        path.components()
+            .all(|component| matches!(component, Component::Normal(_))),
+        "unsafe project-relative path: {rel:?}"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -297,6 +350,55 @@ mod tests {
         assert!(is_relevant("kubejs/assets/kubejs/lang/en_us.json"));
         assert!(!is_relevant("kubejs/assets/kubejs/textures/foo.png"));
         assert!(!is_relevant("mods/foo.jar"));
+    }
+
+    #[test]
+    fn project_relative_paths_reject_traversal_and_windows_prefixes() {
+        let root = Path::new("project/extracted");
+        for unsafe_path in [
+            "../outside.snbt",
+            "config/../../outside.snbt",
+            "/absolute/path",
+            "C:/outside.snbt",
+            r"config\ftbquests\outside.snbt",
+            "config//ftbquests/file.snbt",
+        ] {
+            assert!(
+                safe_project_path(root, unsafe_path).is_err(),
+                "{unsafe_path:?}"
+            );
+        }
+
+        assert_eq!(
+            safe_project_path(root, "config/ftbquests/quest.snbt").unwrap(),
+            root.join("config").join("ftbquests").join("quest.snbt")
+        );
+    }
+
+    #[test]
+    fn create_rejects_relevant_zip_entries_with_traversal_paths() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
+        let nonce = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+        let root = std::env::temp_dir().join(format!("qtrans-zip-path-test-{nonce}"));
+        fs::create_dir_all(&root).unwrap();
+        let zip_path = root.join("pack.zip");
+        let file = fs::File::create(&zip_path).unwrap();
+        let mut writer = ZipWriter::new(file);
+        writer
+            .start_file(
+                "config/ftbquests/../../outside.snbt",
+                SimpleFileOptions::default(),
+            )
+            .unwrap();
+        writer.write_all(b"{}").unwrap();
+        writer.finish().unwrap();
+
+        assert!(Project::create(&zip_path, &root.join("work"), "zh_tw").is_err());
+        assert!(!root.join("outside.snbt").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

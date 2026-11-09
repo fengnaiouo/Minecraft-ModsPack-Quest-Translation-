@@ -73,7 +73,20 @@ impl QTransApp {
                         TEXT,
                     ))
                     .child(stat("KubeJS", self.stats.script_units.to_string(), TEXT))
-                    .child(stat("已翻譯", self.translated.to_string(), GREEN)),
+                    .child(stat("專案已譯", self.translated.to_string(), GREEN))
+                    .child(stat(
+                        "本次新譯",
+                        self.translated_this_run
+                            .saturating_sub(self.reused_this_run)
+                            .to_string(),
+                        GREEN,
+                    ))
+                    .child(stat("本次快取", self.reused_this_run.to_string(), ACCENT))
+                    .child(stat(
+                        "本次失敗",
+                        self.failed_this_run.to_string(),
+                        if self.failed_this_run == 0 { TEXT } else { RED },
+                    )),
             );
         stats
     }

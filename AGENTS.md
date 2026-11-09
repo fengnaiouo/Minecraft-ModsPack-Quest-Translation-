@@ -49,6 +49,8 @@
 | Go 靜態檢查 | 在 `go/translator` 執行 `go vet ./...` |
 | Windows 安裝包 | `.\scripts\package-windows.ps1`（需 Windows 與 Inno Setup） |
 
+VS Code 工作區提供對應的 `QTrans: ...` 驗證工作，優先透過 `rtk` 執行，輸出預設隱藏於終端面板；可避免測試時閃現終端視窗。
+
 只回報實際執行的檢查與結果；未執行的項目明確標示，不宣稱通過。
 
 ## 範圍指引
@@ -64,6 +66,7 @@
 ## 專案文件
 
 - `CHANGELOG.md`：依已確認的 Git 變更整理功能紀錄，不取代 Git log。
+- `docs/PRODUCT_PLAN.md`：產品方向、待確認規格、階段閘門及上市驗收；提案不得當作已實作功能。
 - `docs/PROJECT_HISTORY.md`：專案需求與里程碑；標明資訊來自對話或已提交變更。
 - `docs/AI_CONVERSATION_HISTORY.md`：對話結論與使用者確認的工作界線，不保存逐字聊天紀錄。
 - `docs/DECISIONS.md`：已確認、待確認及已取代的專案決策。

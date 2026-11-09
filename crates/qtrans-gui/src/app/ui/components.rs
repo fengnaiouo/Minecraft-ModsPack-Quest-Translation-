@@ -48,6 +48,14 @@ pub(super) fn provider_button(
     )
 }
 
+pub(super) fn provider_data_notice(provider: &str) -> &'static str {
+    match provider {
+        "offline" => "離線模式：翻譯只使用本機術語表，不會呼叫線上翻譯供應商。",
+        "mock" => "測試模式：使用模擬翻譯結果，不會呼叫線上翻譯供應商。",
+        _ => "資料說明：待翻譯文字與情境會傳送至設定的翻譯服務；若使用 Google、OpenAI 或 DeepL，服務會向該供應商請求翻譯。請勿傳送敏感內容。",
+    }
+}
+
 pub(super) struct SettingFieldOptions<'a> {
     pub(super) id: &'static str,
     pub(super) label: &'static str,

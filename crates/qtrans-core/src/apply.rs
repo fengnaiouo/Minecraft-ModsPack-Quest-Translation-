@@ -1,13 +1,13 @@
 use crate::javascript;
 use crate::lang;
 use crate::model::{validate_target_code, Translation, Unit, UnitKind};
-use crate::project::Project;
+use crate::project::{safe_project_path, Project};
 use crate::snbt::encode_string;
 use anyhow::{Context, Result};
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
-use std::fs;
-use std::io::{BufRead, BufReader, BufWriter, Write};
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
 pub struct ApplyReport {
@@ -78,6 +78,56 @@ pub fn read_translations(project: &Project) -> Result<HashMap<String, String>> {
     Ok(map)
 }
 
+/// Append an approved manual translation for a scanned project unit.
+pub fn save_manual_translation(project: &Project, unit: &Unit, target: &str) -> Result<()> {
+    anyhow::ensure!(
+        !target.trim().is_empty(),
+        "manual translation cannot be empty"
+    );
+    let translation = Translation {
+        id: unit.id.clone(),
+        target: target.to_string(),
+        status: "ok".to_string(),
+        provider: Some("manual".to_string()),
+    };
+    let path = project.translations_path();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&path)?;
+    let mut reader = BufReader::new(&mut file);
+    let mut line = Vec::new();
+    let mut offset = 0u64;
+    let mut last_line_start = 0u64;
+    let mut last_line = Vec::new();
+    loop {
+        line.clear();
+        let bytes = reader.read_until(b'\n', &mut line)?;
+        if bytes == 0 {
+            break;
+        }
+        last_line_start = offset;
+        offset += bytes as u64;
+        last_line.clone_from(&line);
+    }
+    drop(reader);
+    if !last_line.is_empty() && !last_line.ends_with(b"\n") {
+        if serde_json::from_slice::<Translation>(&last_line).is_ok() {
+            file.seek(SeekFrom::End(0))?;
+            file.write_all(b"\n")?;
+        } else {
+            file.set_len(last_line_start)?;
+        }
+    }
+    file.seek(SeekFrom::End(0))?;
+    serde_json::to_writer(&mut file, &translation)?;
+    file.write_all(b"\n")?;
+    file.flush()?;
+    Ok(())
+}
+
 pub fn apply(project: &mut Project) -> Result<ApplyReport> {
     let units = read_units(project)?;
     let translations = read_translations(project)?;
@@ -99,7 +149,7 @@ pub fn apply(project: &mut Project) -> Result<ApplyReport> {
         }
     }
     for (file, file_units) in &by_file {
-        let source_path = extracted.join(file);
+        let source_path = safe_project_path(&extracted, file)?;
         if !source_path.exists() {
             continue;
         }
@@ -156,7 +206,7 @@ pub fn apply(project: &mut Project) -> Result<ApplyReport> {
         project.restore_from_zip(&snbt_files_list)?;
     }
     for (file, file_units) in &by_snbt {
-        let path = extracted.join(file);
+        let path = safe_project_path(&extracted, file)?;
         if !path.exists() {
             continue;
         }
@@ -218,7 +268,7 @@ pub fn apply(project: &mut Project) -> Result<ApplyReport> {
         project.restore_from_zip(&script_files)?;
     }
     for (file, file_units) in &by_script {
-        let path = extracted.join(file);
+        let path = safe_project_path(&extracted, file)?;
         if !path.exists() {
             continue;
         }
@@ -312,7 +362,7 @@ fn write_untranslated(
 #[cfg(test)]
 mod translation_tests {
     use super::*;
-    use crate::model::{Manifest, ProjectConfig, Stats};
+    use crate::model::{Manifest, ProjectConfig, Stats, Unit, UnitKind};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn project_with_translations(content: &[u8]) -> Project {
@@ -339,6 +389,28 @@ mod translation_tests {
         }
     }
 
+    fn write_test_unit(project: &Project) -> Unit {
+        let unit = Unit {
+            id: "unit-1".into(),
+            kind: UnitKind::Lang,
+            file: "kubejs/assets/test/lang/en_us.json".into(),
+            key: Some("hello".into()),
+            path: None,
+            span_start: None,
+            span_end: None,
+            quoted: false,
+            quote: '"',
+            source: "Hello".into(),
+            context: "test".into(),
+        };
+        fs::write(
+            project.strings_path(),
+            format!("{}\n", serde_json::to_string(&unit).unwrap()),
+        )
+        .unwrap();
+        unit
+    }
+
     #[test]
     fn read_translations_ignores_only_a_truncated_final_record() {
         let project = project_with_translations(
@@ -358,6 +430,73 @@ mod translation_tests {
         let error = read_translations(&project).unwrap_err();
 
         assert!(format!("{error:#}").contains("line 1"));
+        fs::remove_dir_all(project.dir).unwrap();
+    }
+
+    #[test]
+    fn save_manual_translation_appends_an_ok_record_for_a_known_unit() {
+        let project = project_with_translations(b"");
+        let unit = write_test_unit(&project);
+
+        save_manual_translation(&project, &unit, "你好").unwrap();
+
+        assert_eq!(
+            read_translations(&project)
+                .unwrap()
+                .get("unit-1")
+                .map(String::as_str),
+            Some("你好")
+        );
+        let records = fs::read_to_string(project.translations_path()).unwrap();
+        assert!(records.contains("\"provider\":\"manual\""));
+        fs::remove_dir_all(project.dir).unwrap();
+    }
+
+    #[test]
+    fn save_manual_translation_rejects_empty_text() {
+        let project = project_with_translations(b"");
+        let unit = write_test_unit(&project);
+
+        assert!(save_manual_translation(&project, &unit, "  ").is_err());
+        assert!(fs::read_to_string(project.translations_path())
+            .unwrap()
+            .is_empty());
+        fs::remove_dir_all(project.dir).unwrap();
+    }
+
+    #[test]
+    fn save_manual_translation_recovers_a_truncated_final_record() {
+        let project = project_with_translations(b"{\"id\":\"unit-1\",\"target\":");
+        let unit = write_test_unit(&project);
+
+        save_manual_translation(&project, &unit, "你好").unwrap();
+
+        assert_eq!(
+            read_translations(&project)
+                .unwrap()
+                .get("unit-1")
+                .map(String::as_str),
+            Some("你好")
+        );
+        fs::remove_dir_all(project.dir).unwrap();
+    }
+
+    #[test]
+    fn save_manual_translation_separates_a_valid_unterminated_final_record() {
+        let project = project_with_translations(
+            r#"{"id":"unit-1","target":"旧譯","status":"ok"}"#.as_bytes(),
+        );
+        let unit = write_test_unit(&project);
+
+        save_manual_translation(&project, &unit, "新譯").unwrap();
+
+        assert_eq!(
+            read_translations(&project)
+                .unwrap()
+                .get("unit-1")
+                .map(String::as_str),
+            Some("新譯")
+        );
         fs::remove_dir_all(project.dir).unwrap();
     }
 }

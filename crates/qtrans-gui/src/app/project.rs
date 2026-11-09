@@ -1,4 +1,4 @@
-use super::paths::{app_root, count_lines};
+use super::paths::app_root;
 use super::QTransApp;
 use gpui::Context;
 use qtrans_core::project::Project;
@@ -23,6 +23,22 @@ impl QTransApp {
         };
         match Project::open(&dir) {
             Ok(project) => {
+                let units = match qtrans_core::apply::read_units(&project) {
+                    Ok(units) => units,
+                    Err(error) => {
+                        self.log.push(format!("讀取可校訂文字失敗：{error:#}"));
+                        self.status = "專案文字載入失敗".to_string();
+                        return false;
+                    }
+                };
+                let translations = match qtrans_core::apply::read_translations(&project) {
+                    Ok(translations) => translations,
+                    Err(error) => {
+                        self.log.push(format!("讀取翻譯記錄失敗：{error:#}"));
+                        self.status = "翻譯記錄載入失敗".to_string();
+                        return false;
+                    }
+                };
                 self.stats = project.manifest.stats.clone();
                 self.pack_name = project.manifest.pack_name.clone();
                 self.provider = project.config.provider.clone();
@@ -38,7 +54,26 @@ impl QTransApp {
                 self.batch_size = project.config.batch_size.max(1).to_string();
                 self.overwrite = project.config.overwrite;
                 self.zip_path = Some(PathBuf::from(&project.manifest.source_zip));
-                self.translated = count_lines(&project.translations_path());
+                self.review_entries = units
+                    .into_iter()
+                    .map(|unit| {
+                        let translation = translations.get(&unit.id).cloned();
+                        super::ReviewEntry { unit, translation }
+                    })
+                    .collect();
+                self.translated = self
+                    .review_entries
+                    .iter()
+                    .filter(|entry| entry.translation.is_some())
+                    .count();
+                self.review_index = self
+                    .review_index
+                    .min(self.review_entries.len().saturating_sub(1));
+                self.review_translation_draft = self
+                    .review_entries
+                    .get(self.review_index)
+                    .and_then(|entry| entry.translation.clone())
+                    .unwrap_or_default();
                 true
             }
             Err(error) => {
@@ -66,6 +101,12 @@ impl QTransApp {
             self.pack_name = stem.to_string();
             self.stats = Default::default();
             self.translated = 0;
+            self.translated_this_run = 0;
+            self.reused_this_run = 0;
+            self.failed_this_run = 0;
+            self.review_entries.clear();
+            self.review_index = 0;
+            self.review_translation_draft.clear();
             self.batch_progress = None;
             self.log.push(format!("已選擇：{}", path.display()));
             self.zip_path = Some(path);
@@ -81,6 +122,15 @@ impl QTransApp {
                 self.project_dir = Some(dir.clone());
                 self.log.push(format!("已開啟專案：{}", dir.display()));
                 if self.refresh() {
+                    self.review_index = 0;
+                    self.review_translation_draft = self
+                        .review_entries
+                        .first()
+                        .and_then(|entry| entry.translation.clone())
+                        .unwrap_or_default();
+                    self.translated_this_run = 0;
+                    self.reused_this_run = 0;
+                    self.failed_this_run = 0;
                     self.status = "專案已載入".to_string();
                 } else {
                     self.project_dir = previous_project;

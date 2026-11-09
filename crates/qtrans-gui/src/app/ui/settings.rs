@@ -265,6 +265,12 @@ impl QTransApp {
                         ))),
                 ),
             )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(ORANGE))
+                    .child(provider_data_notice(&self.provider)),
+            )
             .child(settings_details)
     }
 }

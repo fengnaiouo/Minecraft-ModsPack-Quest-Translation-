@@ -11,6 +11,13 @@ impl QTransApp {
             .project_dir
             .as_ref()
             .is_some_and(|path| path.join("manifest.json").exists());
+        let guidance = if has_project {
+            "可繼續翻譯、校訂、回寫或打包；翻譯服務與語言可在「翻譯設定」調整。"
+        } else if has_zip {
+            "可先在「翻譯設定」選擇供應商，或直接一鍵執行完整流程。"
+        } else {
+            "開始：選擇模組包 ZIP →（選用）設定翻譯服務 → 一鍵執行 → 校訂並打包。"
+        };
         let workflow = div()
             .flex()
             .flex_col()
@@ -31,12 +38,7 @@ impl QTransApp {
                             .flex_col()
                             .gap_1()
                             .child(div().text_sm().text_color(rgb(TEXT)).child("翻譯流程"))
-                            .child(
-                                div()
-                                    .text_xs()
-                                    .text_color(rgb(MUTED))
-                                    .child("依序執行，或直接一鍵完成全部步驟"),
-                            ),
+                            .child(div().text_xs().text_color(rgb(MUTED)).child(guidance)),
                     )
                     .child(button(
                         "run-all",
@@ -45,6 +47,12 @@ impl QTransApp {
                         has_zip && !busy,
                         cx.listener(|this, _, _, cx| this.run_all(cx)),
                     )),
+            )
+            .child(
+                div()
+                    .text_xs()
+                    .text_color(rgb(ORANGE))
+                    .child(provider_data_notice(&self.provider)),
             )
             .child(
                 div()

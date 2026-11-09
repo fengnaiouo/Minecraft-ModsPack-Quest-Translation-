@@ -4,11 +4,30 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+type repeatedByteReader struct {
+	remaining int64
+	value     byte
+}
+
+func (r *repeatedByteReader) Read(buffer []byte) (int, error) {
+	if r.remaining == 0 {
+		return 0, io.EOF
+	}
+	size := min(int64(len(buffer)), r.remaining)
+	for index := range buffer[:size] {
+		buffer[index] = r.value
+	}
+	r.remaining -= size
+	return int(size), nil
+}
 
 func TestTranslateHandlerUsesProviderAndCache(t *testing.T) {
 	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
@@ -97,6 +116,75 @@ func TestTranslateHandlerRejectsInvalidRequests(t *testing.T) {
 	server.handleTranslate(recorder, httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)))
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown provider status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+
+	body = []byte(`{"provider":"mock","items":[]} {"provider":"mock","items":[]}`)
+	recorder = httptest.NewRecorder()
+	server.handleTranslate(recorder, httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("multiple JSON values status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestTranslateHandlerRejectsOversizedRequestBody(t *testing.T) {
+	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{cache: cache}
+	body := &repeatedByteReader{remaining: maxRequestBytes + 1, value: ' '}
+	recorder := httptest.NewRecorder()
+	server.handleTranslate(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/v1/translate", body),
+	)
+	if recorder.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestValidateTranslateRequestEnforcesInputLimitsAndUniqueIDs(t *testing.T) {
+	tests := []struct {
+		name    string
+		request TranslateRequest
+	}{
+		{
+			name: "duplicate IDs",
+			request: TranslateRequest{
+				Target: "zh-TW",
+				Items: []Item{
+					{ID: "one", Text: "First"},
+					{ID: "one", Text: "Second"},
+				},
+			},
+		},
+		{
+			name: "too many items",
+			request: TranslateRequest{
+				Target: "zh-TW",
+				Items:  make([]Item, maxTranslateItems+1),
+			},
+		},
+		{
+			name: "oversized text",
+			request: TranslateRequest{
+				Target: "zh-TW",
+				Items:  []Item{{ID: "one", Text: strings.Repeat("x", maxItemTextBytes+1)}},
+			},
+		},
+		{
+			name: "invalid target path",
+			request: TranslateRequest{
+				Target: "../outside",
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if err := validateTranslateRequest(test.request); err == nil {
+				t.Fatal("expected invalid request to be rejected")
+			}
+		})
 	}
 }
 

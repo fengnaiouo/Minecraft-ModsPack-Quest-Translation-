@@ -1,0 +1,146 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "QTrans: Rust format check",
+			"type": "process",
+			"command": "rtk",
+			"args": [
+				"cargo",
+				"fmt",
+				"--all",
+				"--",
+				"--check"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Rust workspace tests",
+			"type": "process",
+			"command": "rtk",
+			"args": [
+				"cargo",
+				"test",
+				"--workspace"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Rust Clippy",
+			"type": "process",
+			"command": "rtk",
+			"args": [
+				"cargo",
+				"clippy",
+				"--workspace",
+				"--all-targets",
+				"--",
+				"-D",
+				"warnings"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Go tests",
+			"type": "process",
+			"command": "rtk",
+			"args": [
+				"go",
+				"test",
+				"./..."
+			],
+			"options": {
+				"cwd": "${workspaceFolder}\\go\\translator"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Go vet",
+			"type": "process",
+			"command": "rtk",
+			"args": [
+				"go",
+				"vet",
+				"./..."
+			],
+			"options": {
+				"cwd": "${workspaceFolder}\\go\\translator"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Windows installer",
+			"type": "process",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-File",
+				"${workspaceFolder}\\scripts\\package-windows.ps1"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "never",
+				"panel": "dedicated",
+				"showReuseMessage": false,
+				"clear": true
+			}
+		},
+		{
+			"label": "QTrans: Verify Rust formatting",
+			"type": "shell",
+			"command": "rtk",
+			"args": [
+				"cargo",
+				"fmt",
+				"--all",
+				"--",
+				"--check"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

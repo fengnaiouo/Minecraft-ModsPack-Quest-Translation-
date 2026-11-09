@@ -3,6 +3,7 @@ mod header;
 mod logs;
 mod navigation;
 mod project;
+mod review;
 mod settings;
 mod stats;
 mod updates;
@@ -34,6 +35,7 @@ impl Render for QTransApp {
 
         let header = self.render_header(status_color, header_compact, cx);
         let project_card = self.render_project_panel(cx);
+        let review = self.render_review_panel(cx);
         let settings = self.render_settings_panel(&provider_name, cx);
         let workflow = self.render_workflow_panel(cx);
         let stats = self.render_stats_panel(cx);
@@ -42,6 +44,7 @@ impl Render for QTransApp {
         let navigation = self.render_navigation(compact, cx);
         let main_content = match self.page {
             super::AppPage::Workspace => div().child(project_card).child(workflow).child(stats),
+            super::AppPage::Review => div().child(review),
             super::AppPage::Settings => div().child(settings),
             super::AppPage::Logs => div().child(stats).child(log_panel),
         };

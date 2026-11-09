@@ -4,6 +4,8 @@ use qtrans_core::model::Stats;
 pub(super) struct ProgressUpdate {
     pub(super) stats: Option<Stats>,
     pub(super) translated_units: Option<usize>,
+    pub(super) reused_units: Option<usize>,
+    pub(super) failed_units: Option<usize>,
     pub(super) batch: Option<(usize, usize)>,
 }
 
@@ -171,8 +173,12 @@ pub(super) fn parse_cli_progress(line: &str) -> Option<ProgressUpdate> {
         let done = done.trim().parse().ok()?;
         let total = total.trim().parse().ok()?;
         let translated_units = value_after(trimmed, "translated units=").parse().ok();
+        let reused_units = value_after(trimmed, "reused=").parse().ok();
+        let failed_units = value_after(trimmed, "failed=").parse().ok();
         return Some(ProgressUpdate {
             translated_units,
+            reused_units,
+            failed_units,
             batch: Some((done, total)),
             ..Default::default()
         });
@@ -307,6 +313,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(progress.translated_units, Some(6));
+        assert_eq!(progress.reused_units, Some(2));
+        assert_eq!(progress.failed_units, Some(1));
         assert_eq!(progress.batch, Some((5, 10)));
     }
 }

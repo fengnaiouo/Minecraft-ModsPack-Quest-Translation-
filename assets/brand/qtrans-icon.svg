@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">QTrans icon</title>
+  <desc id="description">A geometric quest tile in QTrans green and midnight blue.</desc>
+  <rect width="256" height="256" rx="40" fill="#ffffff"/>
+  <rect x="24" y="24" width="208" height="208" rx="32" fill="#0b1020"/>
+  <g fill="#f1f5f9">
+    <rect x="82" y="72" width="28" height="28"/>
+    <rect x="114" y="72" width="28" height="28"/>
+    <rect x="146" y="72" width="28" height="28"/>
+    <rect x="66" y="104" width="28" height="28"/>
+    <rect x="162" y="104" width="28" height="28"/>
+    <rect x="66" y="136" width="28" height="28"/>
+    <rect x="162" y="136" width="28" height="28"/>
+    <rect x="82" y="168" width="28" height="28"/>
+    <rect x="114" y="168" width="28" height="28"/>
+  </g>
+  <g fill="#49d49d">
+    <rect x="146" y="168" width="28" height="28"/>
+    <rect x="178" y="184" width="28" height="28"/>
+  </g>
+</svg>

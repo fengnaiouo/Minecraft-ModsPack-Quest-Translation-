@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="220" viewBox="0 0 720 220" role="img" aria-labelledby="title description">
+  <title id="title">QTrans</title>
+  <desc id="description">A geometric quest tile and wordmark for the QTrans modpack localization tool.</desc>
+  <rect width="720" height="220" fill="#ffffff"/>
+  <rect x="28" y="28" width="164" height="164" rx="24" fill="#0b1020"/>
+  <g fill="#f1f5f9">
+    <rect x="72" y="64" width="22" height="22"/>
+    <rect x="98" y="64" width="22" height="22"/>
+    <rect x="124" y="64" width="22" height="22"/>
+    <rect x="58" y="90" width="22" height="22"/>
+    <rect x="136" y="90" width="22" height="22"/>
+    <rect x="58" y="116" width="22" height="22"/>
+    <rect x="136" y="116" width="22" height="22"/>
+    <rect x="72" y="142" width="22" height="22"/>
+    <rect x="98" y="142" width="22" height="22"/>
+  </g>
+  <g fill="#49d49d">
+    <rect x="124" y="142" width="22" height="22"/>
+    <rect x="146" y="158" width="22" height="22"/>
+  </g>
+  <text x="226" y="121" fill="#0b1020" font-family="Segoe UI, Arial, sans-serif" font-size="68" font-weight="700" letter-spacing="3">QTRANS</text>
+  <text x="230" y="158" fill="#536176" font-family="Segoe UI, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="2">MINECRAFT MODPACK LOCALIZATION</text>
+</svg>

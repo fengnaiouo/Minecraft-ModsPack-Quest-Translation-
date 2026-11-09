@@ -13,6 +13,7 @@ pub(super) enum ConfigField {
     OpenAiBaseUrl,
     OpenAiKey,
     DeepLKey,
+    ReviewTranslation,
 }
 
 fn service_lang_for(target: &str) -> String {
@@ -105,6 +106,7 @@ impl QTransApp {
             ConfigField::OpenAiBaseUrl => &self.openai_base_url,
             ConfigField::OpenAiKey => &self.openai_api_key,
             ConfigField::DeepLKey => &self.deepl_api_key,
+            ConfigField::ReviewTranslation => &self.review_translation_draft,
         }
     }
 
@@ -137,6 +139,7 @@ impl QTransApp {
             ConfigField::OpenAiBaseUrl => &mut self.openai_base_url,
             ConfigField::OpenAiKey => &mut self.openai_api_key,
             ConfigField::DeepLKey => &mut self.deepl_api_key,
+            ConfigField::ReviewTranslation => &mut self.review_translation_draft,
         };
         if shortcut && key == "a" {
             self.select_all = true;
@@ -195,7 +198,11 @@ impl QTransApp {
                 }
             }
         }
-        self.status = "設定尚未儲存".to_string();
+        self.status = if field == ConfigField::ReviewTranslation {
+            "校訂尚未儲存".to_string()
+        } else {
+            "設定尚未儲存".to_string()
+        };
         cx.notify();
     }
 
@@ -251,6 +258,16 @@ impl QTransApp {
     }
 
     pub(super) fn set_page(&mut self, page: super::AppPage, cx: &mut Context<Self>) {
+        if self.page == super::AppPage::Review
+            && page != super::AppPage::Review
+            && self.review_is_dirty()
+        {
+            self.status = "請先儲存目前校訂，避免遺失修改".to_string();
+            self.log
+                .push("已阻止離開校訂頁：目前翻譯尚未儲存".to_string());
+            cx.notify();
+            return;
+        }
         if self.page == super::AppPage::Settings && page != super::AppPage::Settings {
             if let Err(error) = self.save_settings() {
                 self.log.push(format!("儲存設定失敗：{error:#}"));
@@ -260,6 +277,11 @@ impl QTransApp {
             }
         }
         self.page = page;
+        self.editing = None;
+        self.select_all = false;
+        if page == super::AppPage::Review {
+            self.status = "翻譯校訂".to_string();
+        }
         if page == super::AppPage::Settings {
             self.status = "翻譯設定".to_string();
         }
