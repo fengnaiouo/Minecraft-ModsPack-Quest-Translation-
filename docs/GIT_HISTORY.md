@@ -9,6 +9,11 @@
 | `ceaa354` | 2026-11-09 | `first commit` | 新增 README 專案說明。 |
 | `10de6d5` | 2026-11-09 | `Add adaptive GUI and self-update releases` | 加入 Rust workspace、GPUI GUI、Go 翻譯服務、Windows 建置與封裝流程、tag 發布 workflow。 |
 | `4cde828` | 2026-11-09 | `Fix CI installer language fallback` | 修正 CI 安裝程式語系 fallback。 |
+| `8570b0e` | 2026-11-09 | `修復 QTrans 翻譯流程並整理專案架構` | 整理翻譯、掃描、回寫與 GUI 流程。 |
+| `de8ac24` | 2026-11-09 | `feat: harden translation workflow and add review UI` | 強化翻譯流程、加入人工校訂與相關測試。 |
+| `95bf1df` | 2026-11-09 | `feat(gui): add visible execution log scrollbar` | 加入可見的執行紀錄捲動條。 |
+| `ec1a2a0` | 2026-11-09 | `chore(release): prepare QTrans 0.1.3` | 準備 0.1.3 發布與版本資訊。 |
+| `245881c` | 2026-11-09 | `fix: harden uninstall data retention and prepare public repository` | 解除安裝預設保留使用者資料、GUI 服務生命週期、更新檔位置、公開專案文件與 CI。 |
 
 ## 查詢方式
 

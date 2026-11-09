@@ -11,8 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-const RELEASES_API: &str =
-    "https://api.github.com/repos/fengnaiouo/QTrans/releases/latest";
+const RELEASES_API: &str = "https://api.github.com/repos/fengnaiouo/QTrans/releases/latest";
 const INSTALLER_NAME: &str = "QTrans-Setup-x64.exe";
 const CHECKSUM_NAME: &str = "QTrans-Setup-x64.exe.sha256";
 const MAX_INSTALLER_SIZE: u64 = 300 * 1024 * 1024;
@@ -223,8 +222,7 @@ fn latest_release() -> Result<Option<(String, String, String)>> {
         .get("browser_download_url")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("SHA-256 檢查檔下載網址不存在"))?;
-    let expected_prefix =
-        "https://github.com/fengnaiouo/QTrans/releases/download/";
+    let expected_prefix = "https://github.com/fengnaiouo/QTrans/releases/download/";
     if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
         return Err(anyhow!("Release 附件網址不是此 GitHub 專案"));
     }
@@ -232,8 +230,7 @@ fn latest_release() -> Result<Option<(String, String, String)>> {
 }
 
 fn download_installer(version: &str, url: &str, checksum_url: &str) -> Result<PathBuf> {
-    let expected_prefix =
-        "https://github.com/fengnaiouo/QTrans/releases/download/";
+    let expected_prefix = "https://github.com/fengnaiouo/QTrans/releases/download/";
     if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
         return Err(anyhow!("拒絕從非官方專案網址下載更新檔"));
     }

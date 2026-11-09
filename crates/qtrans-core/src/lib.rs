@@ -19,6 +19,9 @@ pub mod project;
 pub mod scan;
 pub mod snbt;
 
+#[cfg(test)]
+mod test_support;
+
 pub use model::{Manifest, ProjectConfig, Translation, Unit, UnitKind};
 pub use project::Project;
 
