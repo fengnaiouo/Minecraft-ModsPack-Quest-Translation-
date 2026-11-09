@@ -65,7 +65,7 @@ cargo build --release
 
 # Go 翻譯服務
 cd go/translator
-go build -ldflags "-X main.version=0.1.2" -o ../../bin/qtrans-translator.exe .
+go build -ldflags "-X main.version=0.1.3" -o ../../bin/qtrans-translator.exe .
 cd ../..
 ```
 
