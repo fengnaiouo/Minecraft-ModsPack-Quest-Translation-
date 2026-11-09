@@ -254,7 +254,6 @@ mod tests {
     use crate::project::Project;
     use std::fs;
     use std::io::{Read, Write};
-    use std::time::{SystemTime, UNIX_EPOCH};
     use zip::write::SimpleFileOptions;
     use zip::{ZipArchive, ZipWriter};
 
@@ -300,13 +299,7 @@ mod tests {
 
     #[test]
     fn scan_apply_and_repack_preserve_unrelated_script_text() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root =
-            std::env::temp_dir().join(format!("qtrans-js-test-{}-{nonce}", std::process::id()));
-        fs::create_dir_all(&root).unwrap();
+        let root = crate::test_support::unique_temp_dir("js-test");
         let zip_path = root.join("pack.zip");
         let source = r#"// Text.of("comment text")
 const registryId = "kubejs:internal_id";

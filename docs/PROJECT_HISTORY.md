@@ -25,6 +25,9 @@
 - `ceaa354` — `first commit`：加入 README 專案說明。
 - `10de6d5` — `Add adaptive GUI and self-update releases`：提交 Rust／Go 專案、GUI、服務及 Windows 發布流程。
 - `4cde828` — `Fix CI installer language fallback`：修正安裝程式語系 fallback。
+- `8570b0e`、`de8ac24`、`95bf1df` — 整理翻譯流程、加入人工校訂、強化驗證與執行紀錄捲動條。
+- `ec1a2a0` — `chore(release): prepare QTrans 0.1.3`：準備 0.1.3 版本。
+- `245881c` — `fix: harden uninstall data retention and prepare public repository`：解除安裝預設保留使用者資料、GUI 服務生命週期、更新檔位置、公開專案文件與 CI。
 
 以上提交日期均為 2026-11-09；完整提交內容以 Git 歷史為準。細節見 [`GIT_HISTORY.md`](./GIT_HISTORY.md)。
 

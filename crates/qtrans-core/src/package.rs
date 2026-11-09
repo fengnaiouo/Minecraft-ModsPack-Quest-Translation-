@@ -274,16 +274,10 @@ mod tests {
     use super::*;
     use crate::model::{Manifest, ProjectConfig, Stats};
     use crate::project::Project;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn refuses_to_overwrite_the_source_zip() {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("qtrans-package-test-{nonce}"));
-        fs::create_dir_all(&root).unwrap();
+        let root = crate::test_support::unique_temp_dir("package-test");
         let source = root.join("pack.zip");
         let original = b"keep original bytes";
         fs::write(&source, original).unwrap();
@@ -313,11 +307,7 @@ mod tests {
         use zip::write::SimpleFileOptions;
         use zip::ZipWriter;
 
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!("qtrans-package-path-test-{nonce}"));
+        let root = crate::test_support::unique_temp_dir("package-path-test");
         let project_dir = root.join("project");
         let output_dir = root.join("overrides");
         fs::create_dir_all(project_dir.join("extracted")).unwrap();

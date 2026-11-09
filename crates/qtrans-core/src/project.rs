@@ -381,8 +381,7 @@ mod tests {
         use zip::write::SimpleFileOptions;
         use zip::ZipWriter;
 
-        let nonce = chrono::Utc::now().timestamp_nanos_opt().unwrap();
-        let root = std::env::temp_dir().join(format!("qtrans-zip-path-test-{nonce}"));
+        let root = crate::test_support::unique_temp_dir("zip-path-test");
         fs::create_dir_all(&root).unwrap();
         let zip_path = root.join("pack.zip");
         let file = fs::File::create(&zip_path).unwrap();
@@ -407,8 +406,7 @@ mod tests {
         use zip::write::SimpleFileOptions;
         use zip::ZipWriter;
 
-        let nonce = chrono::Utc::now().timestamp_nanos_opt().unwrap();
-        let root = std::env::temp_dir().join(format!("qtrans-project-test-{nonce}"));
+        let root = crate::test_support::unique_temp_dir("project-test");
         let first = root.join("first").join("pack.zip");
         let second = root.join("second").join("pack.zip");
         fs::create_dir_all(first.parent().unwrap()).unwrap();
