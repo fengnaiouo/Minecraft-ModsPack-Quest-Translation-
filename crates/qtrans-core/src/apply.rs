@@ -1,6 +1,6 @@
 use crate::javascript;
 use crate::lang;
-use crate::model::{Translation, Unit, UnitKind};
+use crate::model::{validate_target_code, Translation, Unit, UnitKind};
 use crate::project::Project;
 use crate::snbt::encode_string;
 use anyhow::{Context, Result};
@@ -39,16 +39,37 @@ pub fn read_translations(project: &Project) -> Result<HashMap<String, String>> {
     if !path.exists() {
         return Ok(map);
     }
-    let file = fs::File::open(path)?;
-    for line in BufReader::new(file).lines() {
-        let line = line?;
-        if line.trim().is_empty() {
+    let file = fs::File::open(&path)?;
+    let mut reader = BufReader::new(file);
+    let mut line = Vec::new();
+    let mut line_number = 0;
+    loop {
+        line.clear();
+        if reader.read_until(b'\n', &mut line)? == 0 {
+            break;
+        }
+        line_number += 1;
+        let terminated = line.ends_with(b"\n");
+        if terminated {
+            line.pop();
+        }
+        if line.ends_with(b"\r") {
+            line.pop();
+        }
+        if line.iter().all(|byte| byte.is_ascii_whitespace()) {
             continue;
         }
-        let t: Translation = match serde_json::from_str(&line) {
+        let t: Translation = match serde_json::from_slice(&line) {
             Ok(t) => t,
-            // A crash mid-write can leave a truncated last line; ignore it.
-            Err(_) => continue,
+            Err(_) if !terminated => continue,
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "parse translation record at line {line_number} in {}",
+                        path.display()
+                    )
+                });
+            }
         };
         if t.status == "ok" && !t.target.trim().is_empty() {
             map.insert(t.id, t.target);
@@ -62,6 +83,7 @@ pub fn apply(project: &mut Project) -> Result<ApplyReport> {
     let translations = read_translations(project)?;
     let extracted = project.extracted();
     let target = project.config.target.clone();
+    validate_target_code(&target)?;
 
     let mut missing = 0usize;
     let mut changed: Vec<String> = Vec::new();
@@ -285,4 +307,57 @@ fn write_untranslated(
         )?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod translation_tests {
+    use super::*;
+    use crate::model::{Manifest, ProjectConfig, Stats};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn project_with_translations(content: &[u8]) -> Project {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("qtrans-translations-test-{nonce}"));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("translations.jsonl"), content).unwrap();
+        Project {
+            dir,
+            manifest: Manifest {
+                pack_name: "test".into(),
+                source_zip: String::new(),
+                zip_prefix: String::new(),
+                target_lang: "zh_tw".into(),
+                created_at: String::new(),
+                updated_at: String::new(),
+                stats: Stats::default(),
+                changed: Vec::new(),
+            },
+            config: ProjectConfig::default(),
+        }
+    }
+
+    #[test]
+    fn read_translations_ignores_only_a_truncated_final_record() {
+        let project = project_with_translations(
+            b"{\"id\":\"a\",\"target\":\"\xe4\xb8\xad\",\"status\":\"ok\"}\n{\"id\":",
+        );
+
+        let result = read_translations(&project).unwrap();
+
+        assert_eq!(result.get("a").map(String::as_str), Some("中"));
+        fs::remove_dir_all(project.dir).unwrap();
+    }
+
+    #[test]
+    fn read_translations_reports_malformed_records_before_the_end() {
+        let project = project_with_translations(b"{not-json}\n");
+
+        let error = read_translations(&project).unwrap_err();
+
+        assert!(format!("{error:#}").contains("line 1"));
+        fs::remove_dir_all(project.dir).unwrap();
+    }
 }

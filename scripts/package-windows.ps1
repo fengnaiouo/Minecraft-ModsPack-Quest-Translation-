@@ -62,10 +62,11 @@ Write-Host "== Build Go translation service ==" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path (Join-Path $root "bin") | Out-Null
 Push-Location (Join-Path $root "go\translator")
 try {
+    $goLdFlags = "-X main.version=$appVersion"
     if (Get-Command "rtk" -ErrorAction SilentlyContinue) {
-        rtk go build -o (Join-Path $root "bin\qtrans-translator.exe") .
+        rtk go build -ldflags $goLdFlags -o (Join-Path $root "bin\qtrans-translator.exe") .
     } else {
-        go build -o (Join-Path $root "bin\qtrans-translator.exe") .
+        go build -ldflags $goLdFlags -o (Join-Path $root "bin\qtrans-translator.exe") .
     }
     if ($LASTEXITCODE -ne 0) { throw "Go translation service build failed." }
 } finally {

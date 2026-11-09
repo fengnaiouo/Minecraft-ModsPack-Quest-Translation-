@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // GoogleFree uses the public Google Translate web endpoints. No key needed,
@@ -127,7 +129,7 @@ func (g *GoogleFree) Translate(ctx context.Context, target string, texts []strin
 }
 
 func (g *GoogleFree) one(ctx context.Context, target, text string) (string, error) {
-	chunks := splitLongText(text, 1600)
+	chunks, separators := splitLongText(text, 1600)
 	parts := make([]string, 0, len(chunks))
 	for _, chunk := range chunks {
 		values := url.Values{}
@@ -142,7 +144,14 @@ func (g *GoogleFree) one(ctx context.Context, target, text string) (string, erro
 		}
 		parts = append(parts, translated[0])
 	}
-	return strings.Join(parts, " "), nil
+	var output strings.Builder
+	for index, part := range parts {
+		output.WriteString(part)
+		if index < len(separators) {
+			output.WriteString(separators[index])
+		}
+	}
+	return output.String(), nil
 }
 
 func (g *GoogleFree) batch(ctx context.Context, target string, texts []string) ([]string, error) {
@@ -237,27 +246,60 @@ func parseGoogleResponse(body string, expected int) ([]string, error) {
 	return nil, fmt.Errorf("google_free: could not parse response: %s", truncate(body, 160))
 }
 
-func splitLongText(text string, limit int) []string {
-	if len(text) <= limit {
-		return []string{text}
+func splitLongText(text string, limit int) ([]string, []string) {
+	if limit < 1 || len(text) <= limit {
+		return []string{text}, nil
 	}
-	words := strings.Fields(text)
 	chunks := make([]string, 0, 2)
-	var current strings.Builder
-	for _, word := range words {
-		if current.Len() > 0 && current.Len()+1+len(word) > limit {
-			chunks = append(chunks, current.String())
-			current.Reset()
+	separators := make([]string, 0, 1)
+	remaining := text
+	for len(remaining) > limit {
+		boundary := limit
+		for boundary > 0 && !utf8.RuneStart(remaining[boundary]) {
+			boundary--
 		}
-		if current.Len() > 0 {
-			current.WriteByte(' ')
+		if boundary == 0 {
+			_, size := utf8.DecodeRuneInString(remaining)
+			boundary = size
 		}
-		current.WriteString(word)
+
+		splitAt := boundary
+		for splitAt > 0 {
+			r, size := utf8.DecodeLastRuneInString(remaining[:splitAt])
+			if unicode.IsSpace(r) {
+				break
+			}
+			splitAt -= size
+		}
+		if splitAt > 0 {
+			separatorStart := splitAt
+			for separatorStart > 0 {
+				r, size := utf8.DecodeLastRuneInString(remaining[:separatorStart])
+				if !unicode.IsSpace(r) {
+					break
+				}
+				separatorStart -= size
+			}
+			chunks = append(chunks, remaining[:separatorStart])
+			separatorEnd := splitAt
+			for separatorEnd < len(remaining) {
+				r, size := utf8.DecodeRuneInString(remaining[separatorEnd:])
+				if !unicode.IsSpace(r) {
+					break
+				}
+				separatorEnd += size
+			}
+			separators = append(separators, remaining[separatorStart:separatorEnd])
+			remaining = remaining[separatorEnd:]
+			continue
+		}
+
+		chunks = append(chunks, remaining[:boundary])
+		separators = append(separators, "")
+		remaining = remaining[boundary:]
 	}
-	if current.Len() > 0 {
-		chunks = append(chunks, current.String())
-	}
-	return chunks
+	chunks = append(chunks, remaining)
+	return chunks, separators
 }
 
 func truncate(text string, max int) string {

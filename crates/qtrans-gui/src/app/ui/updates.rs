@@ -54,14 +54,24 @@ impl QTransApp {
                         .child(message),
                 )
                 .when(matches!(&status, UpdateStatus::Available { .. }), |panel| {
-                    if let UpdateStatus::Available { version, url } = status.clone() {
+                    if let UpdateStatus::Available {
+                        version,
+                        url,
+                        checksum_url,
+                    } = status.clone()
+                    {
                         panel.child(button(
                             "download-update",
                             "下載並安裝",
                             ACCENT,
                             !self.busy,
                             cx.listener(move |this, _, _, cx| {
-                                this.download_update(version.clone(), url.clone(), cx)
+                                this.download_update(
+                                    version.clone(),
+                                    url.clone(),
+                                    checksum_url.clone(),
+                                    cx,
+                                )
                             }),
                         ))
                     } else {

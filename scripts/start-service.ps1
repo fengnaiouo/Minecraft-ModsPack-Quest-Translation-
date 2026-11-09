@@ -7,8 +7,13 @@ if (-not $env:QTRANS_ADDR) { $env:QTRANS_ADDR = "127.0.0.1:8787" }
 $exe = Join-Path (Get-Location) "bin\qtrans-translator.exe"
 if (-not (Test-Path $exe)) {
     Write-Host "translator not built, building..." -ForegroundColor Yellow
+    $manifest = Get-Content -Raw "Cargo.toml"
+    if ($manifest -notmatch '(?ms)^\[workspace\.package\]\s*.*?^version\s*=\s*"([^"]+)"') {
+        throw "Unable to read workspace version from Cargo.toml."
+    }
+    $appVersion = $Matches[1]
     Push-Location go\translator
-    try { rtk go build -o "../../bin/qtrans-translator.exe" . } finally { Pop-Location }
+    try { rtk go build -ldflags "-X main.version=$appVersion" -o "../../bin/qtrans-translator.exe" . } finally { Pop-Location }
 }
 
 $running = Get-Process qtrans-translator -ErrorAction SilentlyContinue

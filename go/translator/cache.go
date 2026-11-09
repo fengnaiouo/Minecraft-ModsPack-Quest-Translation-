@@ -38,8 +38,8 @@ func LoadCache(path string) (*Cache, error) {
 	return c, nil
 }
 
-func cacheKey(provider, model, target, text string) string {
-	sum := sha256.Sum256([]byte(provider + "\x00" + model + "\x00" + target + "\x00" + text))
+func cacheKey(provider, model, target, text, context string) string {
+	sum := sha256.Sum256([]byte(provider + "\x00" + model + "\x00" + target + "\x00" + context + "\x00" + text))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -53,7 +53,7 @@ func (c *Cache) Get(key string) (string, bool) {
 func (c *Cache) Set(key, value string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if _, exists := c.data[key]; exists {
+	if old, exists := c.data[key]; exists && old == value {
 		return
 	}
 	c.data[key] = value

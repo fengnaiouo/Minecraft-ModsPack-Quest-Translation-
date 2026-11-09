@@ -1,10 +1,18 @@
 mod config;
 mod paths;
 mod process;
+mod process_output;
 mod project;
 mod ui;
 mod updates;
 mod workflow;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum AppPage {
+    Workspace,
+    Settings,
+    Logs,
+}
 
 use config::ConfigField;
 use gpui::{Context, FocusHandle, ScrollHandle};
@@ -34,7 +42,7 @@ pub(crate) struct QTransApp {
     pub(in crate::app) editing: Option<ConfigField>,
     pub(in crate::app) cursor: usize,
     pub(in crate::app) select_all: bool,
-    pub(in crate::app) show_settings: bool,
+    pub(in crate::app) page: AppPage,
     pub(in crate::app) log: Vec<String>,
     pub(in crate::app) log_scroll: ScrollHandle,
     pub(in crate::app) follow_logs: bool,
@@ -69,7 +77,7 @@ impl QTransApp {
             editing: None,
             cursor: 0,
             select_all: false,
-            show_settings: false,
+            page: AppPage::Workspace,
             log: vec!["選擇模組包 ZIP，或開啟既有專案開始。".to_string()],
             log_scroll: ScrollHandle::new(),
             follow_logs: true,
@@ -82,12 +90,4 @@ impl QTransApp {
         app.restore_last_project();
         app
     }
-}
-
-fn self_status(app: &mut QTransApp, ok: bool) {
-    app.status = if ok {
-        "完成".to_string()
-    } else {
-        "失敗，請查看日誌".to_string()
-    };
 }

@@ -48,20 +48,40 @@ pub(super) fn provider_button(
     )
 }
 
-pub(super) fn setting_field(
-    id: &'static str,
-    label: &'static str,
-    value: &str,
-    placeholder: &'static str,
-    masked: bool,
-    active: bool,
-    cursor: usize,
-    select_all: bool,
-    enabled: bool,
-    focus_handle: &FocusHandle,
-    on_focus: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
-    on_key: impl Fn(&KeyDownEvent, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+pub(super) struct SettingFieldOptions<'a> {
+    pub(super) id: &'static str,
+    pub(super) label: &'static str,
+    pub(super) value: &'a str,
+    pub(super) placeholder: &'static str,
+    pub(super) masked: bool,
+    pub(super) active: bool,
+    pub(super) cursor: usize,
+    pub(super) select_all: bool,
+    pub(super) enabled: bool,
+    pub(super) focus_handle: &'a FocusHandle,
+}
+
+pub(super) fn setting_field<F, K>(
+    options: SettingFieldOptions<'_>,
+    on_focus: F,
+    on_key: K,
+) -> impl IntoElement
+where
+    F: Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    K: Fn(&KeyDownEvent, &mut Window, &mut App) + 'static,
+{
+    let SettingFieldOptions {
+        id,
+        label,
+        value,
+        placeholder,
+        masked,
+        active,
+        cursor,
+        select_all,
+        enabled,
+        focus_handle,
+    } = options;
     let display = if value.is_empty() {
         placeholder.to_string()
     } else if masked {
@@ -81,8 +101,7 @@ pub(super) fn setting_field(
         .char_indices()
         .map(|(index, _)| index)
         .chain(std::iter::once(display.len()))
-        .filter(|index| *index <= display_cursor)
-        .last()
+        .rfind(|index| *index <= display_cursor)
         .unwrap_or(0);
     let (before, after) = display.split_at(display_cursor);
     div()

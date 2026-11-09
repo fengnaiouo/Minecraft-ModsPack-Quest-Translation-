@@ -1,5 +1,18 @@
 use serde::{Deserialize, Serialize};
 
+pub fn validate_target_code(target: &str) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !target.is_empty()
+            && target.len() <= 32
+            && target.as_bytes()[0].is_ascii_alphabetic()
+            && target
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')),
+        "目標語言代碼格式無效：僅允許英文字母、數字、底線與連字號，且須以英文字母開頭"
+    );
+    Ok(())
+}
+
 /// Where a translatable string came from.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -151,6 +164,27 @@ impl Default for ProjectConfig {
             batch_size: default_batch(),
             translation_limit: None,
             overwrite: false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn target_codes_cannot_escape_the_language_directory() {
+        for valid in ["zh_tw", "en_us", "zh", "zh-TW", "zh-Hant-TW"] {
+            assert!(validate_target_code(valid).is_ok(), "{valid}");
+        }
+        for invalid in [
+            "",
+            "../en_us",
+            "zh/tw",
+            ".hidden",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            assert!(validate_target_code(invalid).is_err(), "{invalid}");
         }
     }
 }

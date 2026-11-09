@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -49,6 +50,35 @@ func TestTranslateHandlerUsesProviderAndCache(t *testing.T) {
 	}
 }
 
+func TestTranslateHandlerForceRetranslatesAndReplacesCache(t *testing.T) {
+	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := cacheKey("mock", "", "zh-TW", "Hello", "")
+	cache.Set(key, "舊翻譯")
+	server := &Server{
+		cache:     cache,
+		providers: map[string]Provider{"mock": &Mock{}},
+	}
+	body := []byte(`{"provider":"mock","target":"zh-TW","force":true,"items":[{"id":"one","text":"Hello"}]}`)
+	recorder := httptest.NewRecorder()
+	server.handleTranslate(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)),
+	)
+	var response TranslateResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Stats.Cached != 0 || response.Stats.Translated != 1 {
+		t.Fatalf("stats = %#v, want a fresh translation", response.Stats)
+	}
+	if got, ok := cache.Get(key); !ok || got != "【譯】Hello" {
+		t.Fatalf("cache value = %q, %t; want newly translated text", got, ok)
+	}
+}
+
 func TestTranslateHandlerRejectsInvalidRequests(t *testing.T) {
 	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
 	if err != nil {
@@ -67,5 +97,112 @@ func TestTranslateHandlerRejectsInvalidRequests(t *testing.T) {
 	server.handleTranslate(recorder, httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)))
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unknown provider status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+type shortProvider struct{}
+
+func (shortProvider) Name() string { return "short" }
+
+func (shortProvider) Translate(context.Context, string, []string) ([]string, error) {
+	return nil, nil
+}
+
+type contextRecordingProvider struct {
+	contexts []string
+}
+
+func (p *contextRecordingProvider) Name() string { return "context-recording" }
+
+func (p *contextRecordingProvider) Translate(_ context.Context, _ string, texts []string) ([]string, error) {
+	return texts, nil
+}
+
+func (p *contextRecordingProvider) TranslateWithContext(
+	_ context.Context,
+	_ string,
+	texts, contexts []string,
+) ([]string, error) {
+	p.contexts = append([]string(nil), contexts...)
+	return texts, nil
+}
+
+func TestTranslateHandlerPassesItemContextToContextualProvider(t *testing.T) {
+	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := &contextRecordingProvider{}
+	server := &Server{
+		cache:     cache,
+		providers: map[string]Provider{"contextual": provider},
+	}
+	body := []byte(`{"provider":"contextual","items":[{"id":"one","text":"Open","context":"quest title"}]}`)
+	recorder := httptest.NewRecorder()
+	server.handleTranslate(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)),
+	)
+	if len(provider.contexts) != 1 || provider.contexts[0] != "quest title" {
+		t.Fatalf("provider contexts = %#v, want quest title", provider.contexts)
+	}
+}
+
+func TestTranslateHandlerRejectsProviderResultCountMismatch(t *testing.T) {
+	cache, err := LoadCache(filepath.Join(t.TempDir(), "cache.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{
+		cache:     cache,
+		providers: map[string]Provider{"short": shortProvider{}},
+	}
+	body := []byte(`{"provider":"short","items":[{"id":"one","text":"Hello"}]}`)
+	recorder := httptest.NewRecorder()
+	server.handleTranslate(
+		recorder,
+		httptest.NewRequest(http.MethodPost, "/v1/translate", bytes.NewReader(body)),
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	var response TranslateResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Items) != 1 || response.Items[0].Status != "failed" {
+		t.Fatalf("response items = %#v, want one failed item", response.Items)
+	}
+}
+
+func TestCacheFlushCanReplaceExistingCache(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.json")
+	cache, err := LoadCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cache.Set("one", "first")
+	if err := cache.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	cache.Set("two", "second")
+	if err := cache.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := LoadCache(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := reloaded.Len(); got != 2 {
+		t.Fatalf("cache entries = %d, want 2", got)
+	}
+}
+
+func TestCacheKeyIncludesTranslationContext(t *testing.T) {
+	first := cacheKey("openai", "model", "zh-TW", "Open", "quest title")
+	second := cacheKey("openai", "model", "zh-TW", "Open", "button label")
+	if first == second {
+		t.Fatal("cache key did not account for translation context")
 	}
 }

@@ -191,6 +191,7 @@ fn lang_context(key: &str) -> String {
 }
 
 fn scan_snbt_file(root: &Node, rel: &str, units: &mut Vec<Unit>) {
+    let is_reward_table = rel.starts_with("config/ftbquests/quests/reward_tables/");
     let stem = Path::new(rel)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -202,7 +203,21 @@ fn scan_snbt_file(root: &Node, rel: &str, units: &mut Vec<Unit>) {
         .unwrap_or(stem)
         .to_string();
 
-    push_node(root.get("title"), rel, "title", &chapter_name, units);
+    push_node(
+        root.get("title"),
+        rel,
+        if is_reward_table {
+            "reward_table.title"
+        } else {
+            "title"
+        },
+        if is_reward_table {
+            "reward table"
+        } else {
+            &chapter_name
+        },
+        units,
+    );
     push_node(root.get("subtitle"), rel, "subtitle", &chapter_name, units);
 
     if let Some(groups) = root.get("chapter_groups") {
@@ -286,15 +301,6 @@ fn scan_snbt_file(root: &Node, rel: &str, units: &mut Vec<Unit>) {
             }
         }
     }
-
-    // Reward tables (`config/ftbquests/quests/reward_tables/*.snbt`)
-    push_node(
-        root.get("title"),
-        rel,
-        "reward_table.title",
-        "reward table",
-        units,
-    );
 }
 
 fn collect_string_or_list(node: &Node, file: &str, path: &str, ctx: &str, units: &mut Vec<Unit>) {
@@ -416,5 +422,22 @@ mod tests {
         assert!(!is_translatable("textures/gui/logo.png"));
         assert!(!is_translatable("&a"));
         assert!(!is_translatable(""));
+    }
+
+    #[test]
+    fn root_title_is_recorded_once_for_chapters_and_reward_tables() {
+        let root = snbt::parse(r#"{title: "Welcome"}"#).unwrap();
+        for (file, expected_path) in [
+            ("config/ftbquests/quests/chapters/welcome.snbt", "title"),
+            (
+                "config/ftbquests/quests/reward_tables/drops.snbt",
+                "reward_table.title",
+            ),
+        ] {
+            let mut units = Vec::new();
+            scan_snbt_file(&root, file, &mut units);
+            assert_eq!(units.len(), 1, "{file}");
+            assert_eq!(units[0].path.as_deref(), Some(expected_path));
+        }
     }
 }

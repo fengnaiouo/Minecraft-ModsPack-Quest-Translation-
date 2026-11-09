@@ -15,6 +15,7 @@ type TranslateRequest struct {
 	Provider string     `json:"provider"`
 	Model    string     `json:"model"`
 	Target   string     `json:"target"`
+	Force    bool       `json:"force,omitempty"`
 	Glossary []Glossary `json:"glossary"`
 	Items    []Item     `json:"items"`
 }

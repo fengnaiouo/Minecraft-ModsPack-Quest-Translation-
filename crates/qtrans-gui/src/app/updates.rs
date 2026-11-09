@@ -2,6 +2,7 @@ use super::QTransApp;
 use anyhow::{anyhow, Context, Result};
 use gpui::{Context as GpuiContext, Timer};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -13,6 +14,7 @@ use std::time::Duration;
 const RELEASES_API: &str =
     "https://api.github.com/repos/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/latest";
 const INSTALLER_NAME: &str = "QTrans-Setup-x64.exe";
+const CHECKSUM_NAME: &str = "QTrans-Setup-x64.exe.sha256";
 const MAX_INSTALLER_SIZE: u64 = 300 * 1024 * 1024;
 pub(super) const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -22,9 +24,18 @@ pub(super) enum UpdateStatus {
     Checking,
     NoRelease,
     UpToDate,
-    Available { version: String, url: String },
-    Downloading { version: String },
-    ReadyToInstall { version: String, path: PathBuf },
+    Available {
+        version: String,
+        url: String,
+        checksum_url: String,
+    },
+    Downloading {
+        version: String,
+    },
+    ReadyToInstall {
+        version: String,
+        path: PathBuf,
+    },
     Error(String),
 }
 
@@ -58,6 +69,7 @@ impl QTransApp {
         &mut self,
         version: String,
         url: String,
+        checksum_url: String,
         cx: &mut GpuiContext<Self>,
     ) {
         if self.busy {
@@ -71,7 +83,7 @@ impl QTransApp {
         };
         self.start_update_job(
             loading,
-            move || match download_installer(&version, &url) {
+            move || match download_installer(&version, &url, &checksum_url) {
                 Ok(path) => UpdateStatus::ReadyToInstall { version, path },
                 Err(error) => UpdateStatus::Error(format!("下載更新失敗：{error:#}")),
             },
@@ -155,8 +167,12 @@ impl QTransApp {
 
 fn check_latest_release() -> UpdateStatus {
     match latest_release() {
-        Ok(Some((version, url))) if is_newer(&version, CURRENT_VERSION) => {
-            UpdateStatus::Available { version, url }
+        Ok(Some((version, url, checksum_url))) if is_newer(&version, CURRENT_VERSION) => {
+            UpdateStatus::Available {
+                version,
+                url,
+                checksum_url,
+            }
         }
         Ok(Some(_)) => UpdateStatus::UpToDate,
         Ok(None) => UpdateStatus::NoRelease,
@@ -164,7 +180,7 @@ fn check_latest_release() -> UpdateStatus {
     }
 }
 
-fn latest_release() -> Result<Option<(String, String)>> {
+fn latest_release() -> Result<Option<(String, String, String)>> {
     let response = match ureq::get(RELEASES_API)
         .set("User-Agent", "QTrans")
         .set("Accept", "application/vnd.github+json")
@@ -198,22 +214,43 @@ fn latest_release() -> Result<Option<(String, String)>> {
         .get("browser_download_url")
         .and_then(Value::as_str)
         .ok_or_else(|| anyhow!("安裝檔下載網址不存在"))?;
+    let checksum = assets
+        .iter()
+        .find(|asset| asset.get("name").and_then(Value::as_str) == Some(CHECKSUM_NAME))
+        .ok_or_else(|| anyhow!("最新版本未附上 SHA-256 檢查檔"))?;
+    let checksum_url = checksum
+        .get("browser_download_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("SHA-256 檢查檔下載網址不存在"))?;
     let expected_prefix =
         "https://github.com/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/download/";
-    if !url.starts_with(expected_prefix) {
-        return Err(anyhow!("安裝檔網址不是此 GitHub 專案的 Release 附件"));
+    if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
+        return Err(anyhow!("Release 附件網址不是此 GitHub 專案"));
     }
-    Ok(Some((version, url.to_string())))
+    Ok(Some((version, url.to_string(), checksum_url.to_string())))
 }
 
-fn download_installer(version: &str, url: &str) -> Result<PathBuf> {
+fn download_installer(version: &str, url: &str, checksum_url: &str) -> Result<PathBuf> {
     let expected_prefix =
         "https://github.com/fengnaiouo/Minecraft-ModsPack-Quest-Translation-/releases/download/";
-    if !url.starts_with(expected_prefix) {
-        return Err(anyhow!("拒絕從非官方專案網址下載安裝檔"));
+    if !url.starts_with(expected_prefix) || !checksum_url.starts_with(expected_prefix) {
+        return Err(anyhow!("拒絕從非官方專案網址下載更新檔"));
     }
     let (major, minor, patch) =
         parse_version(version).ok_or_else(|| anyhow!("版本標籤格式無效：{version}"))?;
+    let checksum_response = ureq::get(checksum_url)
+        .set("User-Agent", "QTrans")
+        .timeout(Duration::from_secs(20))
+        .call()
+        .context("無法下載安裝檔 SHA-256 檢查檔")?;
+    let mut checksum_text = String::new();
+    checksum_response
+        .into_reader()
+        .take(256)
+        .read_to_string(&mut checksum_text)
+        .context("讀取 SHA-256 檢查檔失敗")?;
+    let expected_hash = parse_checksum(&checksum_text)?;
+
     let response = ureq::get(url)
         .set("User-Agent", "QTrans")
         .timeout(Duration::from_secs(120))
@@ -240,6 +277,10 @@ fn download_installer(version: &str, url: &str) -> Result<PathBuf> {
     if !bytes.starts_with(b"MZ") {
         return Err(anyhow!("下載內容不是有效的 Windows 安裝程式"));
     }
+    let actual_hash = format!("{:x}", Sha256::digest(&bytes));
+    if actual_hash != expected_hash {
+        return Err(anyhow!("安裝檔 SHA-256 不符，拒絕執行"));
+    }
 
     let directory = std::env::temp_dir().join("QTrans").join("updates");
     fs::create_dir_all(&directory).context("建立更新暫存資料夾失敗")?;
@@ -247,6 +288,37 @@ fn download_installer(version: &str, url: &str) -> Result<PathBuf> {
     let mut file = fs::File::create(&path).context("建立安裝程式檔案失敗")?;
     file.write_all(&bytes).context("儲存安裝程式失敗")?;
     Ok(path)
+}
+
+#[cfg(test)]
+mod checksum_tests {
+    use super::*;
+
+    #[test]
+    fn installer_checksum_must_be_a_sha256_hex_digest() {
+        let valid = format!("{}  {INSTALLER_NAME}", "a".repeat(64));
+        assert!(parse_checksum(&valid).is_ok());
+        assert!(parse_checksum("not-a-checksum").is_err());
+        assert!(parse_checksum("abcd file.exe").is_err());
+    }
+}
+
+fn parse_checksum(contents: &str) -> Result<String> {
+    let mut fields = contents.split_whitespace();
+    let hash = fields
+        .next()
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .ok_or_else(|| anyhow!("SHA-256 檢查檔格式無效"))?;
+    if fields
+        .next()
+        .is_some_and(|filename| filename.trim_start_matches('*') != INSTALLER_NAME)
+    {
+        return Err(anyhow!("SHA-256 檢查檔名稱不符"));
+    }
+    if fields.next().is_some() {
+        return Err(anyhow!("SHA-256 檢查檔包含多筆雜湊"));
+    }
+    Ok(hash.to_ascii_lowercase())
 }
 
 fn parse_version(version: &str) -> Option<(u64, u64, u64)> {

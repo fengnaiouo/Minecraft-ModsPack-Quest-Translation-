@@ -68,9 +68,10 @@ impl QTransApp {
             project
                 .config
                 .translation_limit
-                .map_or(true, |limit| limit > 0),
+                .is_none_or(|limit| limit > 0),
             "翻譯上限必須大於 0"
         );
+        qtrans_core::model::validate_target_code(&project.config.target)?;
         project.config.batch_size = self
             .batch_size
             .parse::<usize>()
@@ -194,21 +195,8 @@ impl QTransApp {
                 }
             }
         }
-        if self.numeric_settings_valid() {
-            if let Err(error) = self.save_settings() {
-                self.log.push(format!("儲存設定失敗：{error:#}"));
-                self.status = "設定儲存失敗".to_string();
-            }
-        } else {
-            self.status = "數值設定尚未完成".to_string();
-        }
+        self.status = "設定尚未儲存".to_string();
         cx.notify();
-    }
-
-    pub(super) fn numeric_settings_valid(&self) -> bool {
-        self.batch_size.parse::<usize>().is_ok_and(|size| size > 0)
-            && (self.limit.trim().is_empty()
-                || self.limit.parse::<usize>().is_ok_and(|limit| limit > 0))
     }
 
     pub(super) fn translation_options(&self) -> anyhow::Result<Vec<String>> {
@@ -216,7 +204,7 @@ impl QTransApp {
             self.service.starts_with("http://") || self.service.starts_with("https://"),
             "服務網址必須以 http:// 或 https:// 開頭"
         );
-        anyhow::ensure!(!self.target.trim().is_empty(), "目標語言不能為空");
+        qtrans_core::model::validate_target_code(&self.target)?;
         let batch_size = self
             .batch_size
             .parse::<usize>()
@@ -258,24 +246,29 @@ impl QTransApp {
 
     pub(super) fn toggle_overwrite(&mut self, cx: &mut Context<Self>) {
         self.overwrite = !self.overwrite;
-        if let Err(error) = self.save_settings() {
-            self.log.push(format!("儲存設定失敗：{error:#}"));
-            self.status = "設定儲存失敗".to_string();
-        }
+        self.status = "設定尚未儲存".to_string();
         cx.notify();
     }
 
-    pub(super) fn toggle_settings(&mut self, cx: &mut Context<Self>) {
-        self.show_settings = !self.show_settings;
+    pub(super) fn set_page(&mut self, page: super::AppPage, cx: &mut Context<Self>) {
+        if self.page == super::AppPage::Settings && page != super::AppPage::Settings {
+            if let Err(error) = self.save_settings() {
+                self.log.push(format!("儲存設定失敗：{error:#}"));
+                self.status = "設定儲存失敗".to_string();
+                cx.notify();
+                return;
+            }
+        }
+        self.page = page;
+        if page == super::AppPage::Settings {
+            self.status = "翻譯設定".to_string();
+        }
         cx.notify();
     }
 
     pub(super) fn set_provider(&mut self, provider: &str, cx: &mut Context<Self>) {
         self.provider = provider.to_string();
-        if let Err(error) = self.save_settings() {
-            self.log.push(format!("儲存設定失敗：{error:#}"));
-            self.status = "設定儲存失敗".to_string();
-        }
+        self.status = "設定尚未儲存".to_string();
         cx.notify();
     }
 }

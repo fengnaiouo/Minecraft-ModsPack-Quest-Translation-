@@ -1,5 +1,6 @@
-use crate::model::{Manifest, ProjectConfig, Stats};
+use crate::model::{validate_target_code, Manifest, ProjectConfig, Stats};
 use anyhow::{Context, Result};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -34,6 +35,7 @@ impl Project {
 
     /// Create (or refresh) a project from a modpack zip.
     pub fn create(zip_path: &Path, work_root: &Path, target: &str) -> Result<Self> {
+        validate_target_code(target)?;
         let zip_path = zip_path
             .canonicalize()
             .with_context(|| format!("locate {}", zip_path.display()))?;
@@ -48,10 +50,18 @@ impl Project {
             .and_then(|s| s.to_str())
             .unwrap_or("modpack");
         let slug = slugify(file_name);
-        let dir = work_root.join("projects").join(&slug);
+        let fingerprint = source_fingerprint(&zip_path)?;
+        fs::create_dir_all(work_root)
+            .with_context(|| format!("create work directory {}", work_root.display()))?;
+        let work_root = fs::canonicalize(work_root)
+            .with_context(|| format!("resolve work directory {}", work_root.display()))?;
+        let dir = work_root
+            .join("projects")
+            .join(format!("{slug}-{}", &fingerprint[..16]));
         let extracted = dir.join("extracted");
         if extracted.exists() {
-            fs::remove_dir_all(&extracted).ok();
+            fs::remove_dir_all(&extracted)
+                .with_context(|| format!("clear extracted project {}", extracted.display()))?;
         }
         fs::create_dir_all(&extracted)?;
         fs::create_dir_all(dir.join("output"))?;
@@ -190,19 +200,35 @@ impl Project {
         let mut restored = 0usize;
         for rel in rels {
             let name = format!("{}{}", self.manifest.zip_prefix, rel);
-            let Ok(mut entry) = archive.by_name(&name) else {
-                continue;
-            };
+            let mut entry = archive
+                .by_name(&name)
+                .with_context(|| format!("restore source ZIP entry missing: {name}"))?;
             let dest = extracted.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR));
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)?;
             }
+
             let mut out = fs::File::create(&dest)?;
             std::io::copy(&mut entry, &mut out)?;
             restored += 1;
         }
         Ok(restored)
     }
+}
+
+fn source_fingerprint(path: &Path) -> Result<String> {
+    let mut file = fs::File::open(path)
+        .with_context(|| format!("open source ZIP for fingerprint {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0; 64 * 1024];
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 pub fn slugify(name: &str) -> String {
@@ -271,5 +297,36 @@ mod tests {
         assert!(is_relevant("kubejs/assets/kubejs/lang/en_us.json"));
         assert!(!is_relevant("kubejs/assets/kubejs/textures/foo.png"));
         assert!(!is_relevant("mods/foo.jar"));
+    }
+
+    #[test]
+    fn projects_with_same_pack_name_are_isolated_by_zip_content() {
+        use std::io::Write;
+        use zip::write::SimpleFileOptions;
+        use zip::ZipWriter;
+
+        let nonce = chrono::Utc::now().timestamp_nanos_opt().unwrap();
+        let root = std::env::temp_dir().join(format!("qtrans-project-test-{nonce}"));
+        let first = root.join("first").join("pack.zip");
+        let second = root.join("second").join("pack.zip");
+        fs::create_dir_all(first.parent().unwrap()).unwrap();
+        fs::create_dir_all(second.parent().unwrap()).unwrap();
+
+        for (path, text) in [(&first, "first"), (&second, "second")] {
+            let file = fs::File::create(path).unwrap();
+            let mut writer = ZipWriter::new(file);
+            writer
+                .start_file("notes.txt", SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(text.as_bytes()).unwrap();
+            writer.finish().unwrap();
+        }
+
+        let work = root.join("work");
+        let first_project = Project::create(&first, &work, "zh_tw").unwrap();
+        let second_project = Project::create(&second, &work, "zh_tw").unwrap();
+        assert_ne!(first_project.dir, second_project.dir);
+
+        fs::remove_dir_all(root).unwrap();
     }
 }

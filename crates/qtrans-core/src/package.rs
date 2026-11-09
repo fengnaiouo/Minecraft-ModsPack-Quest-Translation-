@@ -16,13 +16,21 @@ pub struct BuildReport {
 
 /// Repack the original modpack zip with every changed file applied.
 pub fn build_zip(project: &Project, out: &Path) -> Result<BuildReport> {
-    let source = fs::File::open(&project.manifest.source_zip)
+    let source_path = Path::new(&project.manifest.source_zip);
+    let source_canonical = fs::canonicalize(source_path)
         .with_context(|| format!("open {}", project.manifest.source_zip))?;
-    let mut archive = ZipArchive::new(BufReader::new(source))?;
-
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent)?;
     }
+    let output_canonical = canonical_output_path(out)?;
+    anyhow::ensure!(
+        !same_path(&source_canonical, &output_canonical),
+        "output ZIP must not overwrite the source modpack"
+    );
+    let source = fs::File::open(&source_canonical)
+        .with_context(|| format!("open {}", project.manifest.source_zip))?;
+    let mut archive = ZipArchive::new(BufReader::new(source))?;
+
     let out_file = fs::File::create(out)?;
     let mut writer = ZipWriter::new(out_file);
 
@@ -110,4 +118,72 @@ pub fn export_overrides(project: &Project, dest: &Path) -> Result<usize> {
         count += 1;
     }
     Ok(count)
+}
+
+fn canonical_output_path(out: &Path) -> Result<std::path::PathBuf> {
+    if out.exists() {
+        return fs::canonicalize(out)
+            .with_context(|| format!("resolve output ZIP {}", out.display()));
+    }
+    let parent = out
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let file_name = out
+        .file_name()
+        .context("output ZIP path must include a file name")?;
+    Ok(fs::canonicalize(parent)
+        .with_context(|| format!("resolve output directory {}", parent.display()))?
+        .join(file_name))
+}
+
+#[cfg(windows)]
+fn same_path(left: &Path, right: &Path) -> bool {
+    left.to_string_lossy()
+        .eq_ignore_ascii_case(&right.to_string_lossy())
+}
+
+#[cfg(not(windows))]
+fn same_path(left: &Path, right: &Path) -> bool {
+    left == right
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Manifest, ProjectConfig, Stats};
+    use crate::project::Project;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn refuses_to_overwrite_the_source_zip() {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("qtrans-package-test-{nonce}"));
+        fs::create_dir_all(&root).unwrap();
+        let source = root.join("pack.zip");
+        let original = b"keep original bytes";
+        fs::write(&source, original).unwrap();
+        let project = Project {
+            dir: root.clone(),
+            manifest: Manifest {
+                pack_name: "pack".into(),
+                source_zip: source.to_string_lossy().into_owned(),
+                zip_prefix: String::new(),
+                target_lang: "zh_tw".into(),
+                created_at: String::new(),
+                updated_at: String::new(),
+                stats: Stats::default(),
+                changed: Vec::new(),
+            },
+            config: ProjectConfig::default(),
+        };
+
+        assert!(build_zip(&project, &source).is_err());
+        assert_eq!(fs::read(&source).unwrap(), original);
+
+        fs::remove_dir_all(root).unwrap();
+    }
 }

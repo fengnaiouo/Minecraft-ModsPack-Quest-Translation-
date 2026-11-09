@@ -13,6 +13,10 @@ type Provider interface {
 	Translate(ctx context.Context, target string, texts []string) ([]string, error)
 }
 
+type ContextualProvider interface {
+	TranslateWithContext(ctx context.Context, target string, texts, contexts []string) ([]string, error)
+}
+
 var errMissingKey = errors.New("provider API key is not configured")
 
 func newHTTPClient() *http.Client {

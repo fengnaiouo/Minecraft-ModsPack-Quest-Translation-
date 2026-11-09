@@ -1,7 +1,7 @@
 use super::paths::{app_root, count_lines};
 use super::QTransApp;
 use gpui::Context;
-use qtrans_core::project::{slugify, Project};
+use qtrans_core::project::Project;
 use std::fs;
 use std::path::PathBuf;
 
@@ -17,9 +17,9 @@ impl QTransApp {
         }
     }
 
-    pub(super) fn refresh(&mut self) {
+    pub(super) fn refresh(&mut self) -> bool {
         let Some(dir) = self.project_dir.clone() else {
-            return;
+            return false;
         };
         match Project::open(&dir) {
             Ok(project) => {
@@ -39,11 +39,13 @@ impl QTransApp {
                 self.overwrite = project.config.overwrite;
                 self.zip_path = Some(PathBuf::from(&project.manifest.source_zip));
                 self.translated = count_lines(&project.translations_path());
+                true
             }
             Err(error) => {
                 self.log
                     .push(format!("無法載入專案 {}：{error:#}", dir.display()));
                 self.status = "專案載入失敗".to_string();
+                false
             }
         }
     }
@@ -60,7 +62,7 @@ impl QTransApp {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("modpack");
-            self.project_dir = Some(root.join("work").join("projects").join(slugify(stem)));
+            self.project_dir = None;
             self.pack_name = stem.to_string();
             self.stats = Default::default();
             self.translated = 0;
@@ -75,10 +77,17 @@ impl QTransApp {
     pub(super) fn open_project(&mut self, cx: &mut Context<Self>) {
         if let Some(dir) = rfd::FileDialog::new().pick_folder() {
             if dir.join("manifest.json").exists() {
+                let previous_project = self.project_dir.clone();
                 self.project_dir = Some(dir.clone());
                 self.log.push(format!("已開啟專案：{}", dir.display()));
-                self.refresh();
-                self.status = "專案已載入".to_string();
+                if self.refresh() {
+                    self.status = "專案已載入".to_string();
+                } else {
+                    self.project_dir = previous_project;
+                    if self.project_dir.is_some() {
+                        self.refresh();
+                    }
+                }
             } else {
                 self.log.push(format!(
                     "{} 不是 QTrans 專案（缺少 manifest.json）",
@@ -93,9 +102,6 @@ impl QTransApp {
         let Some(zip) = self.zip_path.clone() else {
             return;
         };
-        let Some(project) = self.project_dir.clone() else {
-            return;
-        };
         self.status = "解包並掃描中...".to_string();
         self.start_job(
             vec![
@@ -108,7 +114,7 @@ impl QTransApp {
                 vec![
                     "scan".into(),
                     "--project".into(),
-                    project.to_string_lossy().to_string(),
+                    "$QTRANS_PROJECT_DIR".into(),
                 ],
             ],
             cx,

@@ -77,6 +77,9 @@ pub fn parse(input: &str) -> Result<Node> {
     parser.skip_trivia();
     let node = parser.value()?;
     parser.skip_trivia();
+    if parser.pos != parser.src.len() {
+        bail!("unexpected trailing input at byte {}", parser.pos);
+    }
     Ok(node)
 }
 
@@ -371,5 +374,15 @@ mod tests {
         assert_eq!(encode_string("hello", true, '"'), "\"hello\"");
         assert_eq!(encode_string("a\nb", true, '"'), "\"a\\nb\"");
         assert_eq!(encode_string("a:b", false, '"'), "\"a:b\"");
+    }
+
+    #[test]
+    fn rejects_non_trivia_after_the_root_value() {
+        assert!(parse(r#"{title: "Welcome"} trailing"#).is_err());
+        assert!(parse(
+            r#"{title: "Welcome"} // comment
+"#
+        )
+        .is_ok());
     }
 }

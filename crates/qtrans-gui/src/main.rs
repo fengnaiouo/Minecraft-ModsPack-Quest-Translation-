@@ -20,7 +20,7 @@ fn main() {
                 }),
                 ..Default::default()
             },
-            |_, cx| cx.new(|cx| app::QTransApp::new(cx)),
+            |_, cx| cx.new(app::QTransApp::new),
         )
         .expect("open window");
         cx.activate(true);

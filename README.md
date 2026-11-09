@@ -30,20 +30,24 @@
 crates/
   qtrans-core/    解析、掃描、回寫、打包（純 Rust）
   qtrans-cli/     命令列工具 qtrans
+    src/cli.rs          命令列參數與子命令
+    src/commands.rs     各命令的工作流程
+    src/translation.rs  服務請求、翻譯快取重用與術語表
   qtrans-gui/     GPUI 圖形介面 qtrans-gui
     src/app/      專案狀態、設定、專案操作、翻譯流程與子程序
     src/app/ui/   工作台、專案卡、設定、流程、統計、日誌與共用元件
     src/theme.rs  GUI 色彩主題
-go/translator/    Go 翻譯服務（HTTP）
+go/translator/    Go 翻譯服務（啟動、HTTP handler、provider、快取及字串保護分檔）
 bin/              建置產物（qtrans-translator.exe）
 modpacks/         放原始模組包 ZIP
 work/
-  projects/<pack>/  解包內容、strings.jsonl、translations.jsonl、manifest.json
+  projects/<pack>-<zip-sha256>/  解包內容、strings.jsonl、translations.jsonl、manifest.json
   output/           全域輸出（若使用 --out）
   cache/            翻譯快取
 ```
 
 所有操作都只會寫入本專案資料夾，不會動到系統暫存目錄。
+專案目錄名稱會附上來源 ZIP 的 SHA-256 前綴，不同內容但檔名相同的模組包不會共用翻譯狀態。
 
 ---
 
@@ -57,7 +61,7 @@ cargo build --release
 
 # Go 翻譯服務
 cd go/translator
-go build -o ../../bin/qtrans-translator.exe .
+go build -ldflags "-X main.version=0.1.2" -o ../../bin/qtrans-translator.exe .
 cd ../..
 ```
 
@@ -104,7 +108,7 @@ GUI 右上角的「檢查更新」會查詢本專案 GitHub Releases。若發現
 # http://127.0.0.1:8787
 ```
 
-無金鑰時使用 `google_free`（Google 翻譯公開端點）。
+服務預設只監聽 `127.0.0.1`，不開放跨來源瀏覽器請求。無金鑰時使用 `google_free`（Google 翻譯公開端點）。
 要更好的品質可設定 OpenAI 相容 API：
 
 ```powershell
@@ -123,7 +127,7 @@ $env:OPENAI_MODEL="gpt-4o-mini"
 輸出：
 
 ```
-work/projects/All-The-Mods-9-Expert-0-7-0/output/All-The-Mods-9-Expert-0.7.0-zh_tw.zip
+work/projects/All-The-Mods-9-Expert-0-7-0-<zip-sha256>/output/All-The-Mods-9-Expert-0.7.0-zh_tw.zip
 work/projects/.../output/...-zh_tw-overrides/   # 只含變更檔案
 ```
 
@@ -193,7 +197,7 @@ qtrans build --project work\projects\xxx
 
 ## 術語表
 
-`work/projects/<pack>/glossary.csv`（UTF-8）：
+`work/projects/<pack>-<zip-sha256>/glossary.csv`（UTF-8）：
 
 ```csv
 term,translation
@@ -287,6 +291,23 @@ KubeJS 腳本採保守掃描，只擷取 `Text.of`、`Text.literal`、`Component
 
 自動化測試使用本機 HTTP 測試伺服器和 `mock` 供應商，不會呼叫 Google、OpenAI 或 DeepL。
 實際供應商仍需網路（Google）或有效 API 金鑰（OpenAI／DeepL）。
+
+---
+
+## 專案文件與 AI 指引
+
+以下文件均屬於此 QTrans repository；專案歷程、需求紀錄及 AI 規則以本 repository 與已提供的使用者需求為依據。`.agents/skills/` 是專案自有 Skills，不以外部 Skills 或共用 Markdown 取代：
+
+- [`AGENTS.md`](./AGENTS.md)：專案共通規則與文件索引
+- [`CLAUDE.md`](./CLAUDE.md)、[`GEMINI.md`](./GEMINI.md)、[`.github/copilot-instructions.md`](./.github/copilot-instructions.md)：AI 工具入口
+- [`.github/instructions/`](./.github/instructions/) 與 [`.github/prompts/`](./.github/prompts/)：檔案範圍指引與任務提示
+- 各模組的 `AGENTS.md`：模組專屬實作規則
+- [`.agents/skills/`](./.agents/skills/)：此 repository 自有的 Skills
+- [`CHANGELOG.md`](./CHANGELOG.md)：已整理的功能變更
+- [`docs/PROJECT_HISTORY.md`](./docs/PROJECT_HISTORY.md)：專案需求及里程碑
+- [`docs/AI_CONVERSATION_HISTORY.md`](./docs/AI_CONVERSATION_HISTORY.md)：AI 協作中確認的需求與界線摘要
+- [`docs/DECISIONS.md`](./docs/DECISIONS.md)：專案決策及其狀態
+- [`docs/GIT_HISTORY.md`](./docs/GIT_HISTORY.md) 與 [`docs/GIT_WORKFLOW.md`](./docs/GIT_WORKFLOW.md)：Git 里程碑與本專案發布流程
 
 ---
 

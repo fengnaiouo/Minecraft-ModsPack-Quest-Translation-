@@ -41,8 +41,15 @@ func NewOpenAIWithModel(model string) *OpenAI {
 func (o *OpenAI) Name() string { return "openai" }
 
 func (o *OpenAI) Translate(ctx context.Context, target string, texts []string) ([]string, error) {
+	return o.TranslateWithContext(ctx, target, texts, nil)
+}
+
+func (o *OpenAI) TranslateWithContext(ctx context.Context, target string, texts, contexts []string) ([]string, error) {
 	if o.apiKey == "" {
 		return nil, errMissingKey
+	}
+	if len(contexts) != 0 && len(contexts) != len(texts) {
+		return nil, fmt.Errorf("openai: expected %d contexts, got %d", len(texts), len(contexts))
 	}
 	langName := target
 	switch target {
@@ -53,12 +60,16 @@ func (o *OpenAI) Translate(ctx context.Context, target string, texts []string) (
 	}
 
 	type entry struct {
-		ID   string `json:"id"`
-		Text string `json:"text"`
+		ID      string `json:"id"`
+		Text    string `json:"text"`
+		Context string `json:"context,omitempty"`
 	}
 	payload := make([]entry, len(texts))
 	for i, text := range texts {
 		payload[i] = entry{ID: fmt.Sprintf("%d", i), Text: text}
+		if len(contexts) > 0 {
+			payload[i].Context = contexts[i]
+		}
 	}
 	userJSON, _ := json.Marshal(payload)
 
@@ -68,8 +79,9 @@ func (o *OpenAI) Translate(ctx context.Context, target string, texts []string) (
 		"1. Tokens such as {p0}, {g0} must be copied exactly (letters, digits, braces). Never translate or reorder them.\n" +
 		"2. {gN} tokens stand for fixed glossary terms; keep the token itself.\n" +
 		"3. Keep Minecraft color codes (&a, §b), printf placeholders (%s, %1$d), \\n escapes, URLs and item ids unchanged.\n" +
-		"4. Use natural, concise Taiwanese Mandarin. Keep widely known mod names in English if there is no common translation.\n" +
-		"5. Do not add explanations, notes or quotation marks around the result.\n" +
+		"4. Use the supplied context only to disambiguate each string; do not include context in the translation.\n" +
+		"5. Use natural, concise Taiwanese Mandarin. Keep widely known mod names in English if there is no common translation.\n" +
+		"6. Do not add explanations, notes or quotation marks around the result.\n" +
 		"Respond ONLY with a JSON object whose keys are the input ids and whose values are the translated strings."
 
 	requestBody := map[string]any{

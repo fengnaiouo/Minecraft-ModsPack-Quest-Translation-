@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestParseGoogleResponse(t *testing.T) {
@@ -65,6 +66,9 @@ func TestOpenAITranslateUsesConfiguredModelAndReturnsItems(t *testing.T) {
 		if len(request.Messages) == 0 || !strings.Contains(request.Messages[0].Content, "Tokens such as {p0}, {g0}") {
 			t.Errorf("system prompt does not describe the actual single-brace placeholders")
 		}
+		if len(request.Messages) < 2 || !strings.Contains(request.Messages[1].Content, "FTB quest chapter title") {
+			t.Errorf("user payload does not include translation context")
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []any{map[string]any{"message": map[string]string{
@@ -77,12 +81,39 @@ func TestOpenAITranslateUsesConfiguredModelAndReturnsItems(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", server.URL)
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	provider := NewOpenAIWithModel("test-model")
-	got, err := provider.Translate(context.Background(), "zh-TW", []string{"Hello"})
+	got, err := provider.TranslateWithContext(
+		context.Background(),
+		"zh-TW",
+		[]string{"Hello"},
+		[]string{"FTB quest chapter title"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if len(got) != 1 || got[0] != "繁體中文" {
 		t.Fatalf("translations = %#v", got)
+	}
+}
+
+func TestSplitLongTextPreservesWhitespaceAndUnicode(t *testing.T) {
+	input := strings.Repeat("a", 9) + " \r\n" + strings.Repeat("界", 5)
+	chunks, separators := splitLongText(input, 7)
+	var rebuilt strings.Builder
+	for index, chunk := range chunks {
+		if !utf8.ValidString(chunk) {
+			t.Fatalf("chunk %d is invalid UTF-8: %q", index, chunk)
+		}
+		if len(chunk) > 7 {
+			t.Fatalf("chunk %d has %d bytes, limit is 7", index, len(chunk))
+		}
+		rebuilt.WriteString(chunk)
+		if index < len(separators) {
+			rebuilt.WriteString(separators[index])
+		}
+	}
+	if got := rebuilt.String(); got != input {
+		t.Fatalf("reconstructed text = %q, want %q", got, input)
 	}
 }
 
