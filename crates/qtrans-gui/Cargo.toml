@@ -13,6 +13,6 @@ anyhow.workspace = true
 serde_json.workspace = true
 qtrans-core = { path = "../qtrans-core" }
 gpui = "0.2.2"
-rfd = "0.15"
+rfd = "0.17"
 ureq.workspace = true
 sha2.workspace = true
