@@ -363,15 +363,9 @@ fn write_untranslated(
 mod translation_tests {
     use super::*;
     use crate::model::{Manifest, ProjectConfig, Stats, Unit, UnitKind};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn project_with_translations(content: &[u8]) -> Project {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("qtrans-translations-test-{nonce}"));
-        fs::create_dir_all(&dir).unwrap();
+        let dir = crate::test_support::unique_temp_dir("translations-test");
         fs::write(dir.join("translations.jsonl"), content).unwrap();
         Project {
             dir,
