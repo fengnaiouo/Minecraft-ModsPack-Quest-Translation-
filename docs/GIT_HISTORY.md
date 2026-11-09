@@ -16,6 +16,7 @@
 | `245881c` | 2026-11-09 | `fix: harden uninstall data retention and prepare public repository` | 解除安裝預設保留使用者資料、GUI 服務生命週期、更新檔位置、公開專案文件與 CI。 |
 | `f363fde` | 2026-11-09 | `style: apply rustfmt and record repository milestones` | 套用 rustfmt 並補上 Git／專案里程碑紀錄。 |
 | `319dfba` | 2026-11-09 | `test: isolate temporary test directories` | 測試暫存目錄改用 PID 與原子計數器，修正平行測試互相覆寫造成的 CI 不穩定。 |
+| `470641c` | 2026-11-09 | `chore(deps): require manual review for cargo major upgrades` | cargo major 升級改為獨立變更；同日發布 `v0.1.4`。 |
 
 ## 查詢方式
 
